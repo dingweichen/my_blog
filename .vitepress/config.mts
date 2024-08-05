@@ -4,6 +4,7 @@ import { defineConfig } from 'vitepress';
 export default defineConfig({
   title: "Weichen's blog",
   description: 'study documents',
+  base: '/my_blog/',
   srcDir: './src',
   themeConfig: {
     // https://vitepress.dev/reference/default-theme-config

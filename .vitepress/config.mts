@@ -32,6 +32,15 @@ export default defineConfig({
           },
         ],
       },
+      {
+        text: '前端工程化',
+        items: [
+          {
+            text: 'Vue',
+            items: [{ text: '基础', link: '/fe-base/vue/' }],
+          },
+        ],
+      },
     ],
 
     socialLinks: [{ icon: 'github', link: 'https://github.com/dingweichen' }],

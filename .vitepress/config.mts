@@ -38,8 +38,9 @@ export default defineConfig({
           {
             text: 'Vue',
             items: [
-              { text: '基础', link: '/fe-base/vue/' },
-              { text: '原理', link: '/fe-base/vue/theory' },
+              { text: 'vue2基础', link: '/fe-base/vue/' },
+              { text: 'vue2原理', link: '/fe-base/vue/theory-vue2' },
+              { text: 'vue3基础', link: '/fe-base/vue/base-vue3' },
             ],
           },
         ],

@@ -43,6 +43,10 @@ export default defineConfig({
               { text: 'vue3基础', link: '/fe-base/vue/base-vue3' },
             ],
           },
+          {
+            text: '打包工具',
+            items: [{ text: 'Webpack', link: '/fe-base/build-tool/webpack' }],
+          },
         ],
       },
     ],

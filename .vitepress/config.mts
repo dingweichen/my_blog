@@ -49,6 +49,15 @@ export default defineConfig({
           },
         ],
       },
+      {
+        text: '计算机基础',
+        items: [
+          {
+            text: '网络',
+            items: [{ text: 'HTTP协议详解', link: '/cs-base/network/http' }],
+          },
+        ],
+      },
     ],
 
     socialLinks: [{ icon: 'github', link: 'https://github.com/dingweichen' }],

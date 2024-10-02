@@ -419,8 +419,7 @@ server: nghttpx\r\n
 绿线 7 字节：第一个字节 `10000110`：第一位`1`表示该首部取值采用 Huffman 编码，`0000110`表示首部取值的长度为 6 字节；后面6字节为首部取值的 Huffman 编码，解码后值为 nghttpx。
 
 HTTP2.0 头部由于基于**二进制编码**，就不需要冒号空格和末尾的\r\n作为分隔符。
-
-![](image/静态头部2_XnTxhCfktE.png)
+<div align="center"> <img src="http://dwc-images-store.oss-cn-beijing.aliyuncs.com/images/静态头部2_XnTxhCfktE.png"/> </div>
 
 参考：[HTTP/2优化-小林](https://xiaolincoding.com/network/2_http/http2.html#头部压缩 "HTTP/2优化-小林")
 

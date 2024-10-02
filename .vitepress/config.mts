@@ -54,7 +54,10 @@ export default defineConfig({
         items: [
           {
             text: '网络',
-            items: [{ text: 'HTTP协议详解', link: '/cs-base/network/http' }],
+            items: [
+              { text: 'TCP协议详解', link: '/cs-base/network/tcp' },
+              { text: 'HTTP协议详解', link: '/cs-base/network/http' },
+            ],
           },
         ],
       },
@@ -86,6 +89,7 @@ export default defineConfig({
     },
   },
   markdown: {
+    math: true,
     image: {
       lazyLoading: true,
     },

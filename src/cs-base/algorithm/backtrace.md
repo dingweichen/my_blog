@@ -235,7 +235,7 @@ var permuteUnique = function (nums) {
 
 `a|ab`,  `aa|b` ,`aab|`。出口是当前字符串切割完毕，即切割线 `|` 走到最后 `a,a,b| `。注意行为树过程中的剪枝操作，例如对于 ababa, 有一种切割方式是 `ab|aba`, 因为 `ab` 不是回文子串，这颗子树就不需要走，即不必对 `aba`进行切割，而是走下一颗子树 `aba|ba`。
 
-![](image/image-20220331172227957_yKYjtpjSbg.png)
+<div align="center"> <img src="http://dwc-images-store.oss-cn-beijing.aliyuncs.com/images/image-20220331172227957_yKYjtpjSbg.png"/> </div>
 
 ```javascript
 var partition = function(s) {
@@ -275,7 +275,7 @@ var partition = function(s) {
 
 ​	思路符合普通的回溯算法，主要确定回溯函数的输入参数，以及剪枝条件。行为树如下：
 
-![](image/image-20220401125732668_zlJQsh5CN6.png)
+<div align="center"> <img src="http://dwc-images-store.oss-cn-beijing.aliyuncs.com/images/image-20220401125732668_zlJQsh5CN6.png"/> </div>
 
 ​	回溯函数的参数为一个二维数组：\[剩余左括号数量，剩余右括号数量]。每次可做两种选择：选择左括号或选择右括号。剪枝条件为两个：`1. left > right 说明path中右括号插入数量过多 `、`2. left == 0 && i==0 说明没有剩余左括号了，且依然想向path中插入左括号`。
 
@@ -318,7 +318,7 @@ var generateParenthesis = function(n) {
 注意剪枝用的是 `break` 而非`continue`，`break`意味者从当前 i=2开始，后面的3，4，5，...到s.length都不参与回溯；而`continue`只是跳过当前回溯，i=2，后面的3，4，5，...到 s.length 还是会继续处理。
 最后在出口处注意判断path是否为4段，因为有可能产生小于4段或者大于4段的结果。
 
-![](image/image-20220403213007111_Qh3vUi9MuF.png)
+<div align="center"> <img src="http://dwc-images-store.oss-cn-beijing.aliyuncs.com/images/image-20220403213007111_Qh3vUi9MuF.png"/> </div>
 
 ```javascript
 var restoreIpAddresses = function(s) {

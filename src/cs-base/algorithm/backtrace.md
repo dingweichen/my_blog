@@ -1,4 +1,4 @@
-<!-- # 回溯
+# 回溯
 
 ## 1. 算法模板
 
@@ -64,7 +64,7 @@ var subsets = function(nums) {
 };
 ```
 
-#### 77.  组合
+### [77. 组合](https://leetcode.cn/problems/combinations/description/)
 
 ​	对于集合 {1,2,3,...,n}, 求其所有长度为k的子集。方式为:
 
@@ -94,7 +94,7 @@ var combine = function (n, k) {
 };
 ```
 
-#### 39. 组合总和
+### [39. 组合总和](https://leetcode.cn/problems/combination-sum/description/)
 
 ​	将数组 \[2,3,6,7] 中的数任意组合成目的数target。**条件：数组中不存在重复元素，且元素可以无限取** 方式为：
 
@@ -127,7 +127,7 @@ var combinationSum = function(candidates, target) {
 };
 ```
 
-#### 40. 组合总和Ⅱ
+### [40. 组合总和Ⅱ](https://leetcode.cn/problems/combination-sum-ii/description/)
 
 ​	将数组 \[2,3,6,7] 中的数任意组合成目的数target。**条件：数组中存在重复元素，且每个元素只能取一次** 。这道题目和上一道题目思路相同，但是得考虑去重的问题。
 
@@ -165,7 +165,7 @@ var combinationSum2 = function(candidates, target) {
 };
 ```
 
-#### 46. 全排列
+### [46. 全排列](https://leetcode.cn/problems/permutations/description/)
 
 ​	给一个数组 nums=\[1,2,3]，返回其所有可能的全排列。**条件：数组不含重复数字**。
 ​	解法和**39. 组合总和** 一致，每一次选择一个数，由于不能重复选取，所以从选项数组中删除被选择元素后进行下一次选择。
@@ -195,7 +195,7 @@ var permute = function (nums) {
 };
 ```
 
-#### 47. 全排列Ⅱ
+### [47. 全排列Ⅱ](https://leetcode.cn/problems/permutations-ii/description/)
 
 ​	给一个数组 nums=\[1,2,3]，返回其所有可能的全排列。**条件：数组包含重复数字**。
 ​	思路与 \[40. 组合总和Ⅱ]\(#40. 组合总和Ⅱ) 一致，由于存在重复元素，所以必须去重。在回溯过程中去重，对数组排序后进行剪枝操作。
@@ -227,7 +227,7 @@ var permuteUnique = function (nums) {
 };
 ```
 
-#### 131. 分割回文串
+### [131. 分割回文串](https://leetcode.cn/problems/palindrome-partitioning/description/)
 
 ​	将字符串 `s` 进行分割，使得每个子串都是回文串。s = "aab", result = \[ \[a,a,b], \[aa,b]]。
 
@@ -267,9 +267,9 @@ var partition = function(s) {
 };
 ```
 
-# 3. 衍生
+## 3. 衍生
 
-#### 22.  括号生成
+### [22. 括号生成](https://leetcode.cn/problems/generate-parentheses/description/)
 
 ​	数字`n`代表生成括号的对数，设计函数生成所有可能并且有效的括号组合。比如 n=3, 输出 `["((()))","(()())","(())()","()(())","()()()"]`。
 
@@ -306,7 +306,7 @@ var generateParenthesis = function(n) {
 };
 ```
 
-#### 93. 复原IP
+### [93. 复原IP](https://leetcode.cn/problems/restore-ip-addresses/description/)
 
 ​	给一个由数字组成的字符串，返回所有可能的有效IP地址。
 
@@ -351,7 +351,7 @@ var restoreIpAddresses = function(s) {
 };
 ```
 
-#### 494. 目标和
+### [494. 目标和](https://leetcode.cn/problems/target-sum/description/)
 
 题目：
 
@@ -387,4 +387,3 @@ var findTargetSumWays = function (nums, target) {
     }
 };
 ```
- -->

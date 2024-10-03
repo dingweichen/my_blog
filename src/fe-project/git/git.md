@@ -1,4 +1,4 @@
-Git学习笔记
+<!-- Git学习笔记
 Git - 官方文档
 ● 安装:  Git - 安装 Git
 ● 配置:  Git - 初次运行 Git 前的配置
@@ -76,6 +76,6 @@ A -> B -> C -> D -> D' -> C' -> B' 。
 ● 2. git cat-file：根据hash值查看git对象相关信息
 	○ git cat-file -t <object_hash>：查看对象类型；
 	○ git cat-file -p <object_hash>：查看对象内容。
-对应关系如下：
+对应关系如下： -->
  
  

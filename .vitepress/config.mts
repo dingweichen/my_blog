@@ -38,14 +38,16 @@ export default defineConfig({
           {
             text: 'Vue',
             items: [
-              { text: 'vue2基础', link: '/fe-base/vue/' },
-              { text: 'vue2原理', link: '/fe-base/vue/theory-vue2' },
-              { text: 'vue3基础', link: '/fe-base/vue/base-vue3' },
+              { text: 'vue2基础', link: '/fe-project/vue/' },
+              { text: 'vue2原理', link: '/fe-project/vue/theory-vue2' },
+              { text: 'vue3基础', link: '/fe-project/vue/base-vue3' },
             ],
           },
           {
             text: '打包工具',
-            items: [{ text: 'Webpack', link: '/fe-base/build-tool/webpack' }],
+            items: [
+              { text: 'Webpack', link: '/fe-project/build-tool/webpack' },
+            ],
           },
         ],
       },
@@ -58,6 +60,10 @@ export default defineConfig({
               { text: 'TCP协议详解', link: '/cs-base/network/tcp' },
               { text: 'HTTP协议详解', link: '/cs-base/network/http' },
             ],
+          },
+          {
+            text: '算法',
+            items: [{ text: '回溯', link: '/cs-base/algorithm/backtrace' }],
           },
         ],
       },

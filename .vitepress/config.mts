@@ -49,6 +49,12 @@ export default defineConfig({
               { text: 'Webpack', link: '/fe-project/build-tool/webpack' },
             ],
           },
+          {
+            text: '性能优化',
+            items: [
+              { text: '基础', link: '/fe-project/performance-optimization/' },
+            ],
+          },
         ],
       },
       {

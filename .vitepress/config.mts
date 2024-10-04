@@ -63,7 +63,10 @@ export default defineConfig({
           },
           {
             text: '算法',
-            items: [{ text: '回溯', link: '/cs-base/algorithm/backtrace' }],
+            items: [
+              { text: '回溯', link: '/cs-base/algorithm/backtrace' },
+              { text: '动态规划', link: '/cs-base/algorithm/dynamic-planning' },
+            ],
           },
         ],
       },

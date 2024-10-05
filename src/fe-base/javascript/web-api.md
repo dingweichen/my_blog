@@ -4,7 +4,7 @@
 
 ​	DOM（Doucument Object Model）将HTML结构形式化成一颗节点树，并定义了操作树的一些API。
 
-### 1.DOM元素操作
+### 1. DOM元素操作
 
 **获取DOM元素**
 

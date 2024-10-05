@@ -75,6 +75,10 @@ export default defineConfig({
               { text: '图论', link: '/cs-base/algorithm/graph' },
             ],
           },
+          {
+            text: '版本控制',
+            items: [{ text: 'Git', link: '/cs-base/git/git' }],
+          },
         ],
       },
     ],

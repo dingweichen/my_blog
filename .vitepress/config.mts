@@ -50,6 +50,15 @@ export default defineConfig({
             ],
           },
           {
+            text: '包管理工具',
+            items: [
+              {
+                text: 'npm&yarn&pnpm',
+                link: '/fe-project/package-management/',
+              },
+            ],
+          },
+          {
             text: '性能优化',
             items: [
               { text: '基础', link: '/fe-project/performance-optimization/' },

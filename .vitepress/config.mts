@@ -44,18 +44,18 @@ export default defineConfig({
             ],
           },
           {
-            text: '打包工具',
-            items: [
-              { text: 'Webpack', link: '/fe-project/build-tool/webpack' },
-            ],
-          },
-          {
             text: '包管理工具',
             items: [
               {
                 text: 'npm&yarn&pnpm',
                 link: '/fe-project/package-management/',
               },
+            ],
+          },
+          {
+            text: '包构建工具',
+            items: [
+              { text: 'Webpack', link: '/fe-project/build-tool/webpack' },
             ],
           },
           {

@@ -94,11 +94,11 @@ npm update (yarn update)
 ```
 
 ::: tip
- **1. package-lock.json 和 yarn.lock的区别？** 
+**1. package-lock.json 和 yarn.lock 的区别？**
 
-- `package-lock.json`: json格式，准确描述了依赖包之间的层级关系，通过其可直接解析出依赖资源树；
+- `package-lock.json`: json 格式，准确描述了依赖包之间的层级关系，通过其可直接解析出依赖资源树；
 - `yarn.lock`: 所有依赖包平铺描述，无法明确主依赖包，必须结合 package.json 文件才能解析出依赖资源树。
-::: 
+  :::
 
 #### 2.1.3 dependencies & devDependencies & peerDependencies
 
@@ -197,29 +197,30 @@ DeepSeek 给出的答案如下, 取决于包管理工具及其版本：
 :::
 
 ## 3. PNPM
+
 根据 `package.json` 生成项目的<OrangeText>依赖解析树</OrangeText>是包管理工具的核心问题，在生成的依赖解析树过程中可能会面临以下问题：
 
 - `嵌套地狱`：项目多个的依赖包引用了同一个公共包 A 的多个相同版本，包 A 被安装多次，导致生成 nodule_module 文件臃肿；
 - `分身依赖`：将公共包 A 使用频率最高的版本提取到 nodule_module 下，即将依赖扁平化能缓解 嵌套地域 问题，但是因为公共包 A 只能提取一个版本，项目中公共包 A 的其他版本无法提取，只能重复安装，这就是分身依赖问题；
 - `幽灵依赖`：将公共包 A 使用频率最高的版本提取到 nodule_module 下，但是 package.json 文件并没有显示声明公共包 A，它却能被项目代码 import，如果其他包不再依赖 A，那么项目代码将执行异常，这就是幽灵依赖问题；
 
-| 问题  | 现状                                              |
-| ----------- | --------------------------------------------------- |
-| **嵌套地狱+**  | npm3、yarn 通过提取公共依赖，将依赖扁平化的方法 **解决**（提取公共依赖的算不一样），pnpm通过包store、硬/软链接方式 **解决**；|
-| **分身依赖**  | npm、yarn **未解决** ，pnpm pnpm通过包store、硬/软链接方式 **解决**；|
-| **幽灵依赖**  | npm、yarn **未解决** ，pnpm pnpm通过包store、硬/软链接方式 **解决**；    |
+| 问题          | 现状                                                                                                                            |
+| ------------- | ------------------------------------------------------------------------------------------------------------------------------- |
+| **嵌套地狱+** | npm3、yarn 通过提取公共依赖，将依赖扁平化的方法 **解决**（提取公共依赖的算不一样），pnpm 通过包 store、硬/软链接方式 **解决**； |
+| **分身依赖**  | npm、yarn **未解决** ，pnpm pnpm 通过包 store、硬/软链接方式 **解决**；                                                         |
+| **幽灵依赖**  | npm、yarn **未解决** ，pnpm pnpm 通过包 store、硬/软链接方式 **解决**；                                                         |
 
-**PNPM** (Performant NPM) 是原作者对NPM的升级，通过将node_module文件存储在store中，并且在 `nodule_module/.pnpm` 文件下生成硬链接，包之前生成软链接的方式实现依赖扁平化，解决了以上3个问题。
+**PNPM** (Performant NPM) 是原作者对 NPM 的升级，通过将 node_module 文件存储在 store 中，并且在 `nodule_module/.pnpm` 文件下生成硬链接，包之前生成软链接的方式实现依赖扁平化，解决了以上 3 个问题。
 
 ::: tip
- **1. 硬链接、软链接分别是什么？** 
- 
- 读完 [通过实践搞懂linux中“软链接”和“硬链接”的区别](https://zhuanlan.zhihu.com/p/516862375)后的个人理解：
-+ `硬链接`：直接指向磁盘文件的指针，存储了文件的地址；
-+ `软链接`：指向硬链接的指针。
-::: 
+**1. 硬链接、软链接分别是什么？**
 
+读完 [通过实践搞懂 linux 中“软链接”和“硬链接”的区别](https://zhuanlan.zhihu.com/p/516862375)后的个人理解：
 
-- [JavaScript 包管理器——NPM 和 Yarn 完整指南](https://www.freecodecamp.org/chinese/news/javascript-package-manager-npm-and-yarn/)
-- [聊聊依赖管理](https://juejin.cn/post/7207702606646329399)
-- [通过实践搞懂linux中“软链接”和“硬链接”的区别](https://zhuanlan.zhihu.com/p/516862375)
+- `硬链接`：直接指向磁盘文件的指针，存储了文件的地址；
+- `软链接`：指向硬链接的指针。
+  :::
+
+* [JavaScript 包管理器——NPM 和 Yarn 完整指南](https://www.freecodecamp.org/chinese/news/javascript-package-manager-npm-and-yarn/)
+* [聊聊依赖管理](https://juejin.cn/post/7207702606646329399)
+* [通过实践搞懂 linux 中“软链接”和“硬链接”的区别](https://zhuanlan.zhihu.com/p/516862375)

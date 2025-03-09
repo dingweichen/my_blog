@@ -44,6 +44,15 @@ export default defineConfig({
             ],
           },
           {
+            text: '模块化-包',
+            items: [
+              {
+                text: '',
+                link: '/fe-project/package-base/',
+              },
+            ],
+          },
+          {
             text: '包管理工具',
             items: [
               {
@@ -55,7 +64,7 @@ export default defineConfig({
           {
             text: '包构建工具',
             items: [
-              { text: 'Webpack', link: '/fe-project/build-tool/webpack' },
+              { text: 'Webpack', link: '/fe-project/package-build/webpack' },
             ],
           },
           {

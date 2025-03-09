@@ -44,10 +44,10 @@ export default defineConfig({
             ],
           },
           {
-            text: '模块化-包',
+            text: '包（模块化）',
             items: [
               {
-                text: '',
+                text: 'CommonJS/AMD/CMD',
                 link: '/fe-project/package-base/',
               },
             ],
@@ -56,7 +56,7 @@ export default defineConfig({
             text: '包管理工具',
             items: [
               {
-                text: 'npm&yarn&pnpm',
+                text: 'Npm/Yarn/Pnpm',
                 link: '/fe-project/package-management/',
               },
             ],

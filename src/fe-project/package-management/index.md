@@ -217,8 +217,8 @@ DeepSeek 给出的答案如下, 取决于包管理工具及其版本：
 
 读完 [通过实践搞懂 linux 中“软链接”和“硬链接”的区别](https://zhuanlan.zhihu.com/p/516862375)后的个人理解：
 
-- `硬链接`：直接指向磁盘文件的指针，存储了文件的地址；
-- `软链接`：指向硬链接的指针。
+- `硬链接`：直接指向磁盘文件的指针，存储了区块文件的地址；通过修改硬链接，能直接修改原区块文件的内容；
+- `软链接`：指向硬链接的指针；通过修改软链接，只会改变其绑定硬链接指向的区块文件，不能修改原区块文件的内容。
   :::
 
 * [JavaScript 包管理器——NPM 和 Yarn 完整指南](https://www.freecodecamp.org/chinese/news/javascript-package-manager-npm-and-yarn/)

@@ -9,7 +9,7 @@ export default defineConfig({
   themeConfig: {
     // https://vitepress.dev/reference/default-theme-config
     nav: [
-      //   { text: 'Home', link: '/' }, // 主页先不显示
+      { text: '主页', link: '/' },
       { text: '学习记录', link: '/fe-base/html-css/' },
     ],
 

@@ -39,4 +39,4 @@ layout: home
 # details: Lorem ipsum dolor sit amet, consectetur adipiscing elit
 ---
 
-<XmindViewer url='./fe-road-map.xmind'></XmindViewer>
+<XmindViewer url='https://dwc-images-store.oss-cn-beijing.aliyuncs.com/xmind/my_blog/FE_RoadMap.xmind'></XmindViewer>

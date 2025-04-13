@@ -10,7 +10,7 @@ export default defineConfig({
     // https://vitepress.dev/reference/default-theme-config
     nav: [
       { text: '主页', link: '/' },
-      { text: '学习记录', link: '/fe-base/html-css/' },
+      { text: '学习记录', link: '/fe-base/html-css/', activeMatch: '^/(cs-base|fe-base|fe-project)(/|$)' },
     ],
 
     sidebar: [

@@ -10,96 +10,112 @@ export default defineConfig({
     // https://vitepress.dev/reference/default-theme-config
     nav: [
       { text: '主页', link: '/' },
-      { text: '学习记录', link: '/fe-base/html-css/', activeMatch: '^/(cs-base|fe-base|fe-project)(/|$)' },
+      {
+        text: '学习记录',
+        link: '/study/fe-base/html-css/',
+        activeMatch: '/study/',
+      },
+      { text: '收藏书签', link: '/awesome-knowledge/' },
     ],
 
-    sidebar: [
-      {
-        text: '前端基础',
-        items: [
-          {
-            text: 'HTML+CSS',
-            // collapsed: true,
-            items: [{ text: '基础', link: '/fe-base/html-css/' }],
-          },
-          {
-            text: 'JavaScript',
-            // collapsed: true,
-            items: [
-              { text: '基础', link: '/fe-base/javascript/' },
-              { text: 'WebApi', link: '/fe-base/javascript/web-api' },
-            ],
-          },
-        ],
-      },
-      {
-        text: '前端工程化',
-        items: [
-          {
-            text: 'Vue',
-            items: [
-              { text: 'vue2基础', link: '/fe-project/vue/' },
-              { text: 'vue2原理', link: '/fe-project/vue/theory-vue2' },
-              { text: 'vue3基础', link: '/fe-project/vue/base-vue3' },
-            ],
-          },
-          {
-            text: '包（模块化）',
-            items: [
-              {
-                text: 'CommonJS/AMD/CMD',
-                link: '/fe-project/package-base/',
-              },
-            ],
-          },
-          {
-            text: '包管理工具',
-            items: [
-              {
-                text: 'Npm/Yarn/Pnpm',
-                link: '/fe-project/package-management/',
-              },
-            ],
-          },
-          {
-            text: '包构建工具',
-            items: [
-              { text: 'Webpack', link: '/fe-project/package-build/webpack' },
-            ],
-          },
-          {
-            text: '性能优化',
-            items: [
-              { text: '基础', link: '/fe-project/performance-optimization/' },
-            ],
-          },
-        ],
-      },
-      {
-        text: '计算机基础',
-        items: [
-          {
-            text: '网络',
-            items: [
-              { text: 'TCP协议详解', link: '/cs-base/network/tcp' },
-              { text: 'HTTP协议详解', link: '/cs-base/network/http' },
-            ],
-          },
-          {
-            text: '算法',
-            items: [
-              { text: '回溯', link: '/cs-base/algorithm/backtrace' },
-              { text: '动态规划', link: '/cs-base/algorithm/dynamic-planning' },
-              { text: '图论', link: '/cs-base/algorithm/graph' },
-            ],
-          },
-          {
-            text: '版本控制',
-            items: [{ text: 'Git', link: '/cs-base/git/git' }],
-          },
-        ],
-      },
-    ],
+    sidebar: {
+      '/study/': [
+        {
+          text: '前端基础',
+          items: [
+            {
+              text: 'HTML+CSS',
+              // collapsed: true,
+              items: [{ text: '基础', link: '/study/fe-base/html-css/' }],
+            },
+            {
+              text: 'JavaScript',
+              // collapsed: true,
+              items: [
+                { text: '基础', link: '/study/fe-base/javascript/' },
+                { text: 'WebApi', link: '/study/fe-base/javascript/web-api' },
+              ],
+            },
+          ],
+        },
+        {
+          text: '前端工程化',
+          items: [
+            {
+              text: 'Vue',
+              items: [
+                { text: 'vue2基础', link: '/study/fe-project/vue/' },
+                { text: 'vue2原理', link: '/study/fe-project/vue/theory-vue2' },
+                { text: 'vue3基础', link: '/study/fe-project/vue/base-vue3' },
+              ],
+            },
+            {
+              text: '包（模块化）',
+              items: [
+                {
+                  text: 'CommonJS/AMD/CMD',
+                  link: '/study/fe-project/package-base/',
+                },
+              ],
+            },
+            {
+              text: '包管理工具',
+              items: [
+                {
+                  text: 'Npm/Yarn/Pnpm',
+                  link: '/study/fe-project/package-management/',
+                },
+              ],
+            },
+            {
+              text: '包构建工具',
+              items: [
+                {
+                  text: 'Webpack',
+                  link: '/study/fe-project/package-build/webpack',
+                },
+              ],
+            },
+            {
+              text: '性能优化',
+              items: [
+                {
+                  text: '基础',
+                  link: '/study/fe-project/performance-optimization/',
+                },
+              ],
+            },
+          ],
+        },
+        {
+          text: '计算机基础',
+          items: [
+            {
+              text: '网络',
+              items: [
+                { text: 'TCP协议详解', link: '/study/cs-base/network/tcp' },
+                { text: 'HTTP协议详解', link: '/study/cs-base/network/http' },
+              ],
+            },
+            {
+              text: '算法',
+              items: [
+                { text: '回溯', link: '/study/cs-base/algorithm/backtrace' },
+                {
+                  text: '动态规划',
+                  link: '/study/cs-base/algorithm/dynamic-planning',
+                },
+                { text: '图论', link: '/study/cs-base/algorithm/graph' },
+              ],
+            },
+            {
+              text: '版本控制',
+              items: [{ text: 'Git', link: '/study/cs-base/git/git' }],
+            },
+          ],
+        },
+      ],
+    },
 
     socialLinks: [{ icon: 'github', link: 'https://github.com/dingweichen' }],
 

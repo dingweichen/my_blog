@@ -106,7 +106,7 @@ packet.json 文件的作用不仅是为了引入 node 环境，它同时是[包�
 
 ### 1.2 loader
 
-​ **loader本质是一个函数，接口源文件作为参数，返回转化后的结果。** 上面我们是通过 webpack 将入口文件引用的 js 模块进行打包。如果入口文件不仅仅引用了 js 模块，还引用了 css，vue 等其他类型的模块，我们通过 loader 将它们进行编译转换后打包。  
+​ **loader本质是一个函数，接收源文件作为参数，返回转化后的结果。** 上面我们是通过 webpack 将入口文件引用的 js 模块进行打包。如果入口文件不仅仅引用了 js 模块，还引用了 css，vue 等其他类型的模块，我们通过 loader 将它们进行编译转换后打包。  
 
 **常见的loader如下：**
 
@@ -378,6 +378,28 @@ module.exports = {
 <div align="center"> <img src="http://dwc-images-store.oss-cn-beijing.aliyuncs.com/images/image-20220620201723875_wJildCNfz0.png"/> </div>
 
 ### 1.3 plugin
+**plugin** 作用于webpack构建全过程中，通常用于bundle文件优化、资源管理和环境变量注入。
+
+**常见的plugin如下：**
+
+| 名称                     | 描述                                                         |
+|--------------------------|--------------------------------------------------------------|
+| CommonsChunkPlugin       | 将 chunks 相同的模块代码提取成公共 js                        |
+| CleanWebpackPlugin       | 清理构建目录                                                 |
+| ExtractTextWebpackPlugin | 将 CSS 从 bundle 文件里提取成一个独立的 CSS 文件             |
+| CopyWebpackPlugin        | 将文件或者文件夹拷贝到构建的输出目录                         |
+| HtmlWebpackPlugin        | 创建 html 文件去承载输出的 bundle                            |
+| UgiffyjsWebpackPlugin    | 压缩 JS                                                      |
+| ZipWebpackPlugin         | 将打包出的资源生成一个 zip 包                                |
+
+**plugin的配置方法：**
+```javascript
+// webpack配置文件 webpack.config.js
+module.exports = {
+    plugins:[ new HtmlWebpackPlugin({ template: 'index.html'})]
+}
+```
+
 
 #### HTML 插件
 

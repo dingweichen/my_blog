@@ -54,7 +54,7 @@ webpack ./src/main.js ./dist/bundle.js
 </body>
 ```
 
-## 1.基本配置
+## 1.基础概念
 
 ### 1.1 路径配置 entry/output
 
@@ -399,7 +399,7 @@ module.exports = {
 };
 ```
 
-#### HTML 插件
+#### 1.3.1 HTML plugin
 
 ​ 在原本的目录中，项目首页 index.html 与打包文件夹 dist 是同级的。
 
@@ -432,26 +432,83 @@ module.exports = {
 
 `HtmlWebpackPlugin()`中传入 `template:index.html`，意思是在 webpack.config.js 同级路径下寻找名为 index.html 的文件，并以其为模板生成新的 index.html 文件放入 dist 文件夹中。
 
-#### JS 压缩插件
+#### 1.3.2 CSS plugin
+
+之前通过 loader 配置过关于 css 的打包，回想一下流程：先通过 `css-loader`解析，再通过 `style-loader` 插入 .html 的 `<head>` 中。如果是开发环境采用先前的配置是没问题的，但是生产环境需要对 css 文件抽离，以缩小 .html 的体积、减少解析 css 的时间。用 `MiniCssExtractPlugin.loader` 代替 `style-loader`，将 css 文件单独抽离出来。
+
+执行以下命令下载 `mini-css-extract-plugin` 插件进行抽离：
+
+```bash
+npm install mini-css-extract-plugin -D
+```
+
+接着在 webpack.config.js 中配置：
+
+```javascript
+// webpack配置文件 webpack.config.js
+const MiniCssExtractPlugin = require('mini-css-extract-plugin');
+
+module.exports = {
+  module: {
+    rules: [
+      {
+        test: /\.css$/i,
+        use: [MiniCssExtractPlugin.loader, 'css-loader'], // style-loader 换成 MiniCssExtractPlugin.loader
+      },
+      {
+        test: /\.less$/i,
+        use: [MiniCssExtractPlugin.loader, 'css-loader', 'less-loader'],
+      },
+    ],
+  },
+  // 2. 配置插件抽离css
+  plugins: [
+    new MiniCssExtractPlugin({
+      filename: 'css/main.[contentHash:8].css',
+    }),
+  ],
+};
+```
+
+配置抽离 css 文件后，效果如下：
+
+<div align="center"> <img src="http://dwc-images-store.oss-cn-beijing.aliyuncs.com/images/image-20220620222723013_Jh5uKCb9lp.png"/> </div>
+
+#### 1.3.3 HTML、CSS、JS 代码压缩
 
 ​ 打包后的出口文件保留原格式会含有多余的字符，比如空格、注释等。通过`uglifyjs-webpack-plugin` 插件可以将打包后的出口文件进行压缩，使得其体积更小，效果如下图所示：
 
 <div align="center"> <img src="http://dwc-images-store.oss-cn-beijing.aliyuncs.com/images/image-20220621161710428_Twqcau8UqY.png"/> </div>
 
-执行以下命令下载 uglifyjs-webpack-plugin 插件：
-
-```bash
-npm install uglifyjs-webpack-plugin@1.1.1 --save-dev
-```
-
-接着在 webpack.config.js 中配置插件：
+通过 `html-webpack-plugin` 、 `optimize-css-assets-webpack-plugin`、`uglifyjs-webpack-plugin` 插件分别对 html、css、js 文件进行压缩，其中 js 压缩在 `mode=production`时会自动开启，无需手动配置。
 
 ```javascript
-// webpack配置文件
-const uglifyJsPlugin = require('uglifyjs-webpack-plugin');
+// webpack配置文件 webpack.config.js
+const HtmlWebpackPlugin = require('html-webpack-plugin');
+const OptimizeCSSAssetsPlugin = require('optimize-css-assets-webpack-plugin');
 
 module.exports = {
-  plugins: [new uglifyJsPlugin()],
+  plugins: [
+    new OptimizeCSSAssetsPlugin({
+      assertNameRegExp: /\.css$/g,
+      cssProcessor: require('cssnano'),
+    }),
+    // 注意一个html入口需要初始化一个插件实例，如果有多个入口则需初始化多个插件实例
+    new HtmlWebpackPlugin({
+      template: path.join(__dirname, 'src/index.html'),
+      filename: 'index.html',
+      chunks: ['index'],
+      inject: true,
+      minify: {
+        html5: true,
+        collapseWhitespace: true,
+        preserveLineBreaks: false,
+        minifyCSS: true,
+        minifyJS: true,
+        removeComments: false,
+      },
+    }),
+  ],
 };
 ```
 
@@ -521,177 +578,13 @@ module.exports = webpackMerge(baseConfig, {
 
 修改 package.json 文件后，开发环境下运行 `npm run dev` 命令，会采用 dev.config.js 配置 webpack，并等待 webpack 打包后本地预览项目；生产环境下运行 `npm run serve`命令，会采用 prod.config.js 配置 webpack，并等待 webpack 打包后放置服务器上访问。
 
-## 2.高级配置
+### 1.6 watch & hmr
 
-### 2.1 多入口
+自动打包是在源代码发生变化时，webpack 自动重新构建出新的输出文件。
 
-​ 在项目有多个入口文件情况下，可以配置 webpack 如下：
+#### 1.6.1 watch 模式
 
-```javascript
-// webpack配置文件
-
-const path = require('path');
-const HtmlWebpackPlugin = require('html-webpack-plugin');
-
-module.exports = {
-  // 1. 配置多入口文件路径
-  entry: {
-    index: path.resolve(__dirname, '/src/index.js'),
-    other: path.resolve(__dirname, '/src/other.js'),
-  },
-  // 2. 配置出口文件路径
-  output: {
-    filename: '[name].[contentHash:8].js', // name 即为上面entry的属性名
-    path: distPath,
-  },
-  // 3. 配置HTML插件
-  plugins: [
-    new HtmlWebpackPlugin({
-      template: path.resolve(__dirname, '/src/index.html'),
-      filename: 'index.html',
-      chunks: ['index'], // 只引用 index.js
-    }),
-    new HtmlWebpackPlugin({
-      template: path.resolve(__dirname, '/src/other.html'),
-      filename: 'other.html',
-      chunks: ['other'], // 只引用 other.js
-    }),
-  ],
-};
-```
-
-配置多入口打包后，效果如下：
-
-<div align="center"> <img src="http://dwc-images-store.oss-cn-beijing.aliyuncs.com/images/image-20220620214616509_vaBFIbRtnB.png"/> </div>
-
-### 2.2 抽离 css 文件
-
-​ 之前通过 loader 配置过关于 css 的打包，回想一下流程：先通过 `css-loader`解析，再通过 `style-loader` 插入 .html 中。如果是开发环境采用先前的配置是没问题的，但是生产环境需要对 css 文件抽离并压缩，以缩小 .html 的体积和减少解析 css 的时间。
-
-执行以下命令下载 `mini-css-extract-plugin` 插件进行抽离，`terser-webpack-plugin` 和 `optimize-css-assets-webpack-plugin` 插件进行压缩：
-
-```bash
-npm install mini-css-extract-plugin --save-dev
-npm install terser-webpack-plugin --save-dev
-npm install optimize-css-assets-webpack-plugin --save-dev
-```
-
-接着在 webpack.config.js 中配置：
-
-```javascript
-// webpack配置文件
-const MiniCssExtractPlugin = require('mini-css-extract-plugin');
-const TerserJSPlugin = require('terser-webpack-plugin');
-const OptimizeCSSAssetsPlugin = require('optimize-css-assets-webpack-plugin');
-
-module.exports = {
-  // 1. 配置loader
-  module: {
-    rules: [
-      {
-        test: /\.css$/i,
-        use: [MiniCssExtractPlugin.loader, 'css-loader'], // style-loader 换成 MiniCssExtractPlugin.loader
-      },
-      {
-        test: /\.less$/i,
-        use: [MiniCssExtractPlugin.loader, 'css-loader', 'less-loader'],
-      },
-    ],
-  },
-  // 2. 配置插件抽离css
-  plugins: [
-    new MiniCssExtractPlugin({
-      filename: 'css/main.[contentHash:8].css',
-    }),
-  ],
-  // 3. 压缩css
-  optimization: {
-    minimizer: [new TerserJSPlugin({}), new OptimizeCSSAssetsPlugin({})],
-  },
-};
-```
-
-配置抽离 css 文件后，效果如下：
-
-<div align="center"> <img src="http://dwc-images-store.oss-cn-beijing.aliyuncs.com/images/image-20220620222723013_Jh5uKCb9lp.png"/> </div>
-
-### 2.3 抽离公共代码
-
-​ 在项目中，一个模块可能被其他很多模块都引用到。如果将公共模块都打包入其他模块中，会导致打包文件过于臃肿。此外，一旦其他模块有微小的改动，公共模块就得跟着该模块重新再打包一次，这样无疑是十分耗时的。这些公共模块被分为两类：自己写的模块称为 `公共模块`，第三方引入的模块称为 `第三方模块`。
-
-​ 在 webpack.config.js 中配置文件抽离：
-
-```javascript
-// webpack配置文件
-module.exports = {
-  optimization: {
-    // 分割代码块
-    splitChunks: {
-      chunks: 'all',
-      // 缓存分组
-      cacheGruops: {
-        // 第三方模块拆分
-        verndor: {
-          name: 'vendor', // chunk名称
-          priority: 1, // 分块优先级，先拆分第三方模块
-          test: /node_modules/, // 匹配路径，从该路径匹配第三方模块
-          minSize: 0, // 大小限制，模块>=该值就进行抽离
-          minChunks: 1, // 次数限制，模块被引用>=该值就进行抽离
-        },
-        // 公共模块
-        common: {
-          name: 'common',
-          priority: 0,
-          minSize: 0,
-          minChunks: 2,
-        },
-      },
-    },
-  },
-};
-```
-
-配置抽离公共模块后，效果如下：
-
-<div align="center"> <img src="http://dwc-images-store.oss-cn-beijing.aliyuncs.com/images/image-20220621100244396_QzS9aEBRc2.png"/> </div>
-
-### 2.4 懒加载
-
-​ 懒加载是一个通用的概念，在 vue 引入子组件或者 vue-router 路由切换组件中，我们都使用过懒加载。懒加载实际上就是按需加载，或者称为异步加载。
-
-​ 懒加载并不是 webpack 定义的功能，但是 webpack 支持并检测这种写法：
-
-```javascript
-// 入口文件 index.js
-import _ from './src/untils'; // 正常引用
-
-// 异步加载-懒加载
-setTimeout(() => {
-  import('./src/untils').then(res => {
-    // 返回一个promise对象，res即为引入的对象
-    res.add(1, 2);
-  });
-}, 1500);
-```
-
-懒加载的模块会被 webpack 抽离，作为一个单独的 bundle 文件等待浏览器请求：
-
-<div align="center"> <img src="http://dwc-images-store.oss-cn-beijing.aliyuncs.com/images/image-20220621113241550_uv47_tx7-t.png"/> </div>
-
-> 📌module, chunk 和 bundle 的区别：
-> 1\. module：webpack 打包资源的最小单位，每个源码文件都被 webpack 视为一个模块
-> 2\. chunk：webpack 对资源的组合，由多个模块合并成一个 chunk。产生 chunk 的方式如：“多入口” 中配置 entry，“抽离公共代码”中配置 vendor 和 common，“懒加载” 中异步引入的模块。chunk 存在于内存中。
-> 3\. bundle：bundle 即是 chunk 最终输出的打包文件，一个 chunk 对应一个 bundle
-
-<div align="center"> <img src="http://dwc-images-store.oss-cn-beijing.aliyuncs.com/images/image-20220621111704535_36U-c9nYmi.png"/> </div>
-
-## 3. 自动打包
-
-    自动打包是在源代码发生变化时，webpack自动重新构建出新的输出文件。
-
-### 3.1 watch 模式
-
-    通过开启webpack 的 watch 模式，可以自动检测源代码的变化，并重新自动构建新的bundle文件。
+通过开启 webpack 的 watch 模式，可以自动检测源代码的变化，并重新自动构建新的 bundle 文件。
 
 **watch 的配置方法：** [详情](https://webpack.docschina.org/configuration/watch#root)
 
@@ -716,7 +609,7 @@ module.exports = {
 
 通过轮训询问系统指定文件的最后编辑时间是否发生变化，决定是否重新构建 bundle。一旦文件发生变化，并不会立即立即购建，而是等 `aggregateTimeout` 时间后统一进行重新构建。
 
-### 3.2 HMR 热更新
+#### 1.6.2 HMR 热更新
 
 **热更新的配置方法：**
 
@@ -772,6 +665,181 @@ watch 和 hmr 都会自动触发 webpack 重新编译，生成新的 bundle.js �
 | **硬盘占用**           | 会生成实际文件             | 无额外硬盘写入                            |
 
 :::
+
+### 1.7 文件指纹
+
+散列值（Hash）在信息安全中通常被用来作为签名，唯一确定文件的正确性、完整性。在 Webpack 中也通过几种维度的散列值唯一标识打包后的 bundle 文件，也被称作 `文件指纹`。
+
+**常见的文件指纹如下：**：
+
+| 类型        | 作用范围   | 变化条件           | 适用场景        |
+| ----------- | ---------- | ------------------ | --------------- |
+| hash        | 整个项目   | 项目任何文件变化   | 不推荐常规使用  |
+| chunkHash   | 单个 chunk | chunk 或其依赖变化 | JavaScript 文件 |
+| contentHash | 单个文件   | 文件内容变化       | CSS/资源文件    |
+
+---
+
+**文件指纹的配置方法：**
+
+```javascript{11,22,38}
+// webpack配置文件 webpack.config.js
+
+const MiniCssExtractPlugin = require('mini-css-extract-plugin');
+
+module.exports = {
+  entry: {
+    index: './src/main.js',
+  },
+  output: {
+    path: path.resolve(__dirname, 'dist'),
+    filename: '[name]_[chunkhash:8].js',
+  },
+  mode: 'production',
+  rules: [
+    {
+      test: /\.(png|jpg|gif)$/i,
+      use: [
+        {
+          loader: 'url-loader',
+          options: {
+            limit: 8192,
+            name: 'img/[name]_[hash:8].[ext]', // 注意这里相当于contenthash，并不是整个项目维度的hash
+          },
+        },
+      ],
+    },
+    {
+      test: /\.css$/i,
+      use: [MiniCssExtractPlugin.loader, 'css-loader'], // style-loader 换成 MiniCssExtractPlugin.loader
+    },
+    {
+      test: /\.less$/i,
+      use: [MiniCssExtractPlugin.loader, 'css-loader', 'less-loader'],
+    },
+  ],
+  plugins: [
+    new MiniCssExtractPlugin({
+      filename: 'css/main_[contentHash:8].css',
+    }),
+  ],
+};
+```
+
+## 2.高级配置
+
+### 2.1 多入口
+
+​ 在项目有多个入口文件情况下，可以配置 webpack 如下：
+
+```javascript
+// webpack配置文件
+
+const path = require('path');
+const HtmlWebpackPlugin = require('html-webpack-plugin');
+
+module.exports = {
+  // 1. 配置多入口文件路径
+  entry: {
+    index: path.resolve(__dirname, '/src/index.js'),
+    other: path.resolve(__dirname, '/src/other.js'),
+  },
+  // 2. 配置出口文件路径
+  output: {
+    filename: '[name].[contentHash:8].js', // name 即为上面entry的属性名
+    path: distPath,
+  },
+  // 3. 配置HTML插件
+  plugins: [
+    new HtmlWebpackPlugin({
+      template: path.resolve(__dirname, '/src/index.html'),
+      filename: 'index.html',
+      chunks: ['index'], // 只引用 index.js
+    }),
+    new HtmlWebpackPlugin({
+      template: path.resolve(__dirname, '/src/other.html'),
+      filename: 'other.html',
+      chunks: ['other'], // 只引用 other.js
+    }),
+  ],
+};
+```
+
+配置多入口打包后，效果如下：
+
+<div align="center"> <img src="http://dwc-images-store.oss-cn-beijing.aliyuncs.com/images/image-20220620214616509_vaBFIbRtnB.png"/> </div>
+
+### 2.2 抽离公共代码
+
+​ 在项目中，一个模块可能被其他很多模块都引用到。如果将公共模块都打包入其他模块中，会导致打包文件过于臃肿。此外，一旦其他模块有微小的改动，公共模块就得跟着该模块重新再打包一次，这样无疑是十分耗时的。这些公共模块被分为两类：自己写的模块称为 `公共模块`，第三方引入的模块称为 `第三方模块`。
+
+​ 在 webpack.config.js 中配置文件抽离：
+
+```javascript
+// webpack配置文件
+module.exports = {
+  optimization: {
+    // 分割代码块
+    splitChunks: {
+      chunks: 'all',
+      // 缓存分组
+      cacheGruops: {
+        // 第三方模块拆分
+        verndor: {
+          name: 'vendor', // chunk名称
+          priority: 1, // 分块优先级，先拆分第三方模块
+          test: /node_modules/, // 匹配路径，从该路径匹配第三方模块
+          minSize: 0, // 大小限制，模块>=该值就进行抽离
+          minChunks: 1, // 次数限制，模块被引用>=该值就进行抽离
+        },
+        // 公共模块
+        common: {
+          name: 'common',
+          priority: 0,
+          minSize: 0,
+          minChunks: 2,
+        },
+      },
+    },
+  },
+};
+```
+
+配置抽离公共模块后，效果如下：
+
+<div align="center"> <img src="http://dwc-images-store.oss-cn-beijing.aliyuncs.com/images/image-20220621100244396_QzS9aEBRc2.png"/> </div>
+
+### 2.3 懒加载
+
+​ 懒加载是一个通用的概念，在 vue 引入子组件或者 vue-router 路由切换组件中，我们都使用过懒加载。懒加载实际上就是按需加载，或者称为异步加载。
+
+​ 懒加载并不是 webpack 定义的功能，但是 webpack 支持并检测这种写法：
+
+```javascript
+// 入口文件 index.js
+import _ from './src/untils'; // 正常引用
+
+// 异步加载-懒加载
+setTimeout(() => {
+  import('./src/untils').then(res => {
+    // 返回一个promise对象，res即为引入的对象
+    res.add(1, 2);
+  });
+}, 1500);
+```
+
+懒加载的模块会被 webpack 抽离，作为一个单独的 bundle 文件等待浏览器请求：
+
+<div align="center"> <img src="http://dwc-images-store.oss-cn-beijing.aliyuncs.com/images/image-20220621113241550_uv47_tx7-t.png"/> </div>
+
+::: details module, chunk 和 bundle 的区别：
+
+- `module`：webpack 打包资源的最小单位，每个源码文件都被 webpack 视为一个模块;
+- `chunk`：webpack 对资源的组合，由多个模块合并成一个 chunk，产生 chunk 的方式如：“多入口” 中配置 entry、“抽离公共代码” 中配置 vendor 和 common、“懒加载” 中异步引入的模块，chunk 存在于内存中；
+- `bundle`：bundle 即是 chunk 最终输出的打包文件，一个 chunk 对应一个 bundle。
+  :::
+
+<div align="center"> <img src="http://dwc-images-store.oss-cn-beijing.aliyuncs.com/images/image-20220621111704535_36U-c9nYmi.png"/> </div>
 
 ## 3. 性能优化
 

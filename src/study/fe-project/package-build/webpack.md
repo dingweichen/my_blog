@@ -1,5 +1,3 @@
-
-
 ## webpack 基本使用 （why，what）
 
 ​ 现在项目都分模块进行开发，所以有了 `模块化` 的概念。模块化就是将每个 js/css/vue 文件视为一个模块，通过在原模块中导出，其他模块中导入，在其他模块中引用原模块特有功能。当一个项目模块过多，模块间的依赖关系变得复杂时，引用各种模块会产生时延，从而影响项目的运行效率。
@@ -106,19 +104,19 @@ packet.json 文件的作用不仅是为了引入 node 环境，它同时是[包�
 
 ### 1.2 loader
 
-​ **loader本质是一个函数，接收源文件作为参数，返回转化后的结果。** 上面我们是通过 webpack 将入口文件引用的 js 模块进行打包。如果入口文件不仅仅引用了 js 模块，还引用了 css，vue 等其他类型的模块，我们通过 loader 将它们进行编译转换后打包。  
+​ **loader 本质是一个函数，接收源文件作为参数，返回转化后的结果。** 上面我们是通过 webpack 将入口文件引用的 js 模块进行打包。如果入口文件不仅仅引用了 js 模块，还引用了 css，vue 等其他类型的模块，我们通过 loader 将它们进行编译转换后打包。
 
-**常见的loader如下：**
+**常见的 loader 如下：**
 
-| 名称            | 描述                                  |
-|-----------------|---------------------------------------|
-| babel-loader    | 转换 ES6、ES7 等 JS 新特性语法        |
-| css-loader      | 支持 `.css` 文件的加载和解析          |
-| less-loader     | 将 Less 文件转换成 CSS                |
-| ts-loader       | 将 TypeScript 转换成 JavaScript       |
-| file-loader     | 进行图片、字体等的打包                |
-| raw-loader      | 将文件以字符串的形式导入              |
-| thread-loader   | 多进程打包 JS 和 CSS                  |
+| 名称          | 描述                            |
+| ------------- | ------------------------------- |
+| babel-loader  | 转换 ES6、ES7 等 JS 新特性语法  |
+| css-loader    | 支持 `.css` 文件的加载和解析    |
+| less-loader   | 将 Less 文件转换成 CSS          |
+| ts-loader     | 将 TypeScript 转换成 JavaScript |
+| file-loader   | 进行图片、字体等的打包          |
+| raw-loader    | 将文件以字符串的形式导入        |
+| thread-loader | 多进程打包 JS 和 CSS            |
 
 **loader 的配置方法：**
 
@@ -132,8 +130,7 @@ module.exports = {
 ```
 
 - `test`: 识别出哪些文件会被转换
-- `use`: 定义出在进行转换时，应该使用哪个 loader，use字段的解析顺序是 **从后往前**（即先执行 css-loader 进行解析，后执行 style-loader ）
-
+- `use`: 定义出在进行转换时，应该使用哪个 loader，use 字段的解析顺序是 **从后往前**（即先执行 css-loader 进行解析，后执行 style-loader ）
 
 #### 1.2.1 CSS Loader
 
@@ -156,14 +153,14 @@ console.log(multi(2, 3));
 
 打包 css 模块需要两种类型的 loader：
 
-- `css-loader`：加载并解析导入的 css 文件，返回 css 代码
-- `style-loader`：将解析出的 css 代码插入引用这些代码的 DOM 中
+- `css-loader`：加载并解析导入的 .css 文件，并且转换成 commonjs 对象；
+- `style-loader`：将解析出的 css 代码，通过 `<style>` 插入 `<head>` 中
 
 我们先通过 npm 下载这两个 loader 模块，执行以下命令：
 
 ```bash
-npm install --save-dev css-loader
-npm install --save-dev style-loader
+npm install css-loader -D
+npm install style-loader -D
 ```
 
 接着在 webpack.config.js 文件中配置 loader：
@@ -215,7 +212,7 @@ module.exports = {
 
 记住 use 的执行顺序是**从后往前** 。
 
-#### ES6 文件打包
+#### 1.2.2 ES6 loader
 
 ​ 一般打包 js 模块，是不需要 loader 进行转换的，但是这样打包的 js 模块会保留 ES6 语法，导致某些低版本浏览器无法解析。为了提高项目的兼容性，通过配置 `babel-loader` 将 js 模块中的 ES6 语法转为 ES5 语法。
 
@@ -248,7 +245,7 @@ module.exports = {
 };
 ```
 
-#### VUE 文件打包
+#### 1.2.3 VUE loader
 
 ​ 如果入口文件引入了 vue 模块，则在必须配置 `vue-loader` 和 `vue-template-compiler`后进行打包。执行以下命令下载 vue-loader 和 vue-template-compiler 模块：
 
@@ -295,7 +292,7 @@ module.exports = {
 
 配置 `alias` 的目的是切换 vue 支持的模式。vue 有两种模式：`runtime-only` 和 `runtime-complier`，该配置制定了项目 import vue 的路径为 `node_modules/vue/dist/vue.esm.js`，这个路径下版本的 vue 包含了 runtime-compiler 模式。
 
-#### 图片文件打包
+#### 1.2.4 图片 loader
 
 ​ 如果入口文件引用了图片模块，则必须配置转换图片对应的 loader 后再打包。与图片有关的 loader 有两个：
 
@@ -305,8 +302,8 @@ module.exports = {
 执行以下命令下载 url-loader 和 file-loader 模块：
 
 ```bash
-npm install url-loader --save-dev
-npm install file-loader --save-dev
+npm install url-loader -D
+npm install file-loader -D
 ```
 
 接着在 webpack.config.js 文件中配置 loader：
@@ -337,7 +334,7 @@ module.exports = {
 
 上面 `limit`字段设置了打包图片采用的 loader：如果图片文件小于 8KB，采用 `url-loader` 将图片直接转为 base64 编码写入 .html 文件中；如果图片大于等于 8KB，采用 `file-loader` 将图片重新打包入 dist 文件夹中，同时对图片重新命名。
 
-**配置 file-loader 打包后图片命名**
+**配置 url-loader 打包后图片命名**
 
 如果不进行配置，file-loader 对图片模块进行打包后生成的文件名称是一段 32 位 hash ：
 
@@ -378,28 +375,29 @@ module.exports = {
 <div align="center"> <img src="http://dwc-images-store.oss-cn-beijing.aliyuncs.com/images/image-20220620201723875_wJildCNfz0.png"/> </div>
 
 ### 1.3 plugin
-**plugin** 作用于webpack构建全过程中，通常用于bundle文件优化、资源管理和环境变量注入。
 
-**常见的plugin如下：**
+**plugin** 作用于 webpack 构建全过程中，通常用于 bundle 文件优化、资源管理和环境变量注入。
 
-| 名称                     | 描述                                                         |
-|--------------------------|--------------------------------------------------------------|
-| CommonsChunkPlugin       | 将 chunks 相同的模块代码提取成公共 js                        |
-| CleanWebpackPlugin       | 清理构建目录                                                 |
-| ExtractTextWebpackPlugin | 将 CSS 从 bundle 文件里提取成一个独立的 CSS 文件             |
-| CopyWebpackPlugin        | 将文件或者文件夹拷贝到构建的输出目录                         |
-| HtmlWebpackPlugin        | 创建 html 文件去承载输出的 bundle                            |
-| UgiffyjsWebpackPlugin    | 压缩 JS                                                      |
-| ZipWebpackPlugin         | 将打包出的资源生成一个 zip 包                                |
+**常见的 plugin 如下：**
 
-**plugin的配置方法：**
+| 名称                     | 描述                                             |
+| ------------------------ | ------------------------------------------------ |
+| CommonsChunkPlugin       | 将 chunks 相同的模块代码提取成公共 js            |
+| CleanWebpackPlugin       | 清理构建目录                                     |
+| ExtractTextWebpackPlugin | 将 CSS 从 bundle 文件里提取成一个独立的 CSS 文件 |
+| CopyWebpackPlugin        | 将文件或者文件夹拷贝到构建的输出目录             |
+| HtmlWebpackPlugin        | 创建 html 文件去承载输出的 bundle                |
+| UgiffyjsWebpackPlugin    | 压缩 JS                                          |
+| ZipWebpackPlugin         | 将打包出的资源生成一个 zip 包                    |
+
+**plugin 的配置方法：**
+
 ```javascript
 // webpack配置文件 webpack.config.js
 module.exports = {
-    plugins:[ new HtmlWebpackPlugin({ template: 'index.html'})]
-}
+  plugins: [new HtmlWebpackPlugin({ template: 'index.html' })],
+};
 ```
-
 
 #### HTML 插件
 
@@ -457,7 +455,11 @@ module.exports = {
 };
 ```
 
-### 1.4 配置文件分离
+### 1.4 mode
+
+配置 webpack 的打包产物环境，针对不同的环境自动启用不同的优化方案。[配置详见](https://webpack.docschina.org/configuration/mode/)
+
+### 1.5 配置文件分离
 
 ​ webpack 的配置文件并没有规定全放在一个 `webpack.config.js`文件中。项目开发阶段有一个 webpack 配置，项目生产阶段也有一个 webpack 配置，可以将开发阶段的配置抽离在 `dev.config.js` 中，生产阶段的配置抽离在 `prod.config.js` 中，公共配置抽离在 `base.confg.js`中。
 
@@ -682,6 +684,94 @@ setTimeout(() => {
 > 3\. bundle：bundle 即是 chunk 最终输出的打包文件，一个 chunk 对应一个 bundle
 
 <div align="center"> <img src="http://dwc-images-store.oss-cn-beijing.aliyuncs.com/images/image-20220621111704535_36U-c9nYmi.png"/> </div>
+
+## 3. 自动打包
+
+    自动打包是在源代码发生变化时，webpack自动重新构建出新的输出文件。
+
+### 3.1 watch 模式
+
+    通过开启webpack 的 watch 模式，可以自动检测源代码的变化，并重新自动构建新的bundle文件。
+
+**watch 的配置方法：** [详情](https://webpack.docschina.org/configuration/watch#root)
+
+```javascript
+// webpack配置文件 webpack.config.js
+module.exports = {
+  // 默认 false，也就是不开启
+  watch: true,
+  // 只有开启监听模式时，watchOptions 才有意义
+  watchOptions: {
+    // 默认为空，不监听的文件或者文件夹，支持正则匹配
+    ignored: /node_modules/,
+    // 监听到变化发生后会等待 300ms 再去执行，默认 300ms
+    aggregateTimeout: 300,
+    // 判断文件是否发生变化是通过不停询问系统指定文件有没有变化实现的，默认每秒问 1000 次
+    poll: 1000,
+  },
+};
+```
+
+**watch 的实现原理：**
+
+通过轮训询问系统指定文件的最后编辑时间是否发生变化，决定是否重新构建 bundle。一旦文件发生变化，并不会立即立即购建，而是等 `aggregateTimeout` 时间后统一进行重新构建。
+
+### 3.2 HMR 热更新
+
+**热更新的配置方法：**
+
+```javascript
+// package.json
+{
+    "script": {
+        "build": "webpack",
+        "dev": "webpack-dev-server --open"
+    }
+}
+```
+
+```javascript
+const webpack = require('webpack');
+
+// webpack配置文件 webpack.config.js
+module.exports = {
+    mode: 'development',
+    plugins: [
+        new webpack.HotModuleReplacementPlugin();
+    ],
+    devServer:{
+        contentBase: './dist',
+        hot: true
+    }
+}
+```
+
+**热更新的实现原理：** [详情](https://juejin.cn/post/7292427026873696296)
+
+<div align="center"> <img src="http://dwc-images-store.oss-cn-beijing.aliyuncs.com/images/20250503163103.png"/> </div>
+
+如上图所示，HMR 分为 `启动` 和 `更新`：
+
+- `启动`：1->2->A->B `Webpack Compiler` 将源代码和`HMR Runtime`一起编译成输出文件 `bundle.js` 放置在静态资源服务端 `Bundle Server` 上，浏览器通过访问服务器获取静态资源后渲染页面；
+- `更新`：1->2->3->4 当一个文件 or 模块发生变化，`Webpack Compiler` 监听到文件变化重新对文件进行编译打包，将变更内容放入 `manifest.json` 中，(包含了文件的 hash 和 chunkId ，用来说明变化的内容)，通过 `HMR Server` 主动推送给 `HMR Runtime`，`HMR Runtime` 通过 ajax 请求 从 `Bundle Server` 获取变化的模块，局部替换，触发浏览器重绘。
+
+:::details watch 和 hmr 的区别
+watch 和 hmr 都会自动触发 webpack 重新编译，生成新的 bundle.js 文件。不同的是，watch 会将生成的 bundle.js 写入磁盘，而 hmr 只将其写入内存中，因此 watch 更新后需要用户重新刷新浏览器更新静态资源。
+
+具体总结如下：
+
+| 特性                   | watch 模式                 | HMR（热更新）                             |
+| ---------------------- | -------------------------- | ----------------------------------------- |
+| **是否需要刷新浏览器** | 需要                       | 不需要                                    |
+| **更新粒度**           | 重新编译整个项目（或入口） | 仅替换修改的模块                          |
+| **保留应用状态**       | 否                         | 是                                        |
+| **适用场景**           | 所有项目                   | 单页应用（React/Vue 等）                  |
+| **配置复杂度**         | 简单                       | 需要额外插件和代码支持                    |
+| **是否写入 dist/**     | 是（物理文件更新）         | 否（内存中运行）                          |
+| **访问编译结果**       | 直接通过 `dist/` 文件      | 通过开发服务器 URL（如 `localhost:8080`） |
+| **硬盘占用**           | 会生成实际文件             | 无额外硬盘写入                            |
+
+:::
 
 ## 3. 性能优化
 

@@ -491,7 +491,6 @@ module.exports = {
   plugins: [
     new OptimizeCSSAssetsPlugin({
       assertNameRegExp: /\.css$/g,
-      cssProcessor: require('cssnano'),
     }),
     // 注意一个html入口需要初始化一个插件实例，如果有多个入口则需初始化多个插件实例
     new HtmlWebpackPlugin({
@@ -511,6 +510,61 @@ module.exports = {
   ],
 };
 ```
+
+#### 1.3.4 output 自动清理
+
+webpack 每次打包前并不会在 output 中 `rm -rf` 删除旧产物后，再生成新的产物。要实现这个功能需要配置 `clean-webpack-plugin` 插件：
+
+```javascript
+// webpack配置文件 webpack.config.js
+const { CleanWebpackPlugin } = require('clean-webpack-plugin');
+
+module.exports = {
+  plugins: [new CleanWebpackPlugin()],
+};
+```
+
+#### 1.3.5 PostCSS autoprefixer plugin
+
+`less`,`scss` **css 预处理器** 都是用来增强 css 语法，`postcss` **css 后处理器** 用来补充 css 对浏览器的兼容性。预处理器在 css 文件最终生成前处理，后处理器在 css 文件生成后进行处理，优化现有 css，两者使用并不冲突。
+
+配置 `postcss` 的 `autoprefixer`：
+
+```javascript
+// webpack配置文件 webpack.config.js
+module.exports = {
+  module: {
+    rules: [
+      {
+        test: /\.css$/i,
+        use: [MiniCssExtractPlugin.loader, 'css-loader', 'postcss-loader'],
+      },
+      {
+        test: /\.less$/i,
+        use: [
+          MiniCssExtractPlugin.loader,
+          'css-loader',
+          'less-loader',
+          'postcss-loader',
+        ],
+      },
+    ],
+  },
+};
+```
+
+```javascript
+// postcss配置文件 postcss.config.js（在根目录下与webpack.config.js同级）
+module.exports = {
+  plugins: [
+    require('autoprefixer')({
+      overrideBrowserslist: ['last 2 versions', '> 1%'], // 最新两个版本，> 1% 用户使用
+    }),
+  ],
+};
+```
+
+<div align="center"> <img src="http://dwc-images-store.oss-cn-beijing.aliyuncs.com/images/20250503234345.png"/> </div>
 
 ### 1.4 mode
 

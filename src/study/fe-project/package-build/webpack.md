@@ -100,7 +100,7 @@ module.exports = {
 npm init
 ```
 
-packet.json 文件的作用不仅是为了引入 node 环境，它同时是[包管理工具的图谱](/fe-project/package-management/#package.json)。
+packet.json 文件的作用不仅是为了引入 node 环境，它同时是[包管理工具的图谱](/study/fe-project/package-management/#package.json)。
 
 ### 1.2 loader
 

@@ -18,7 +18,7 @@
 2. 通过包管理工具 `npm` 或 `yarn` 一键下载、安装、更新、删除软件包。
 3. 通过 `node_modules` 文件夹，存储项目中依赖的所有软件包。
 
-### 2.1 package.json
+### 2.1 package.json {#package.json}
 
 package.json 是包管理工具的图谱，在项目根目录下通过：
 

@@ -374,6 +374,68 @@ module.exports = {
 
 <div align="center"> <img src="http://dwc-images-store.oss-cn-beijing.aliyuncs.com/images/image-20220620201723875_wJildCNfz0.png"/> </div>
 
+#### 1.2.5 静态资源内联 loader
+
+`静态资源内联` 意思是将 html、css、 js 代码直接写入到入口 index.html 文件中，这样即保证了这些代码优先被加载，又减少了获取静态资源的异步请求。一些加载优先级比较高的代码可以考虑直接内联。
+
+html、js 采用 `raw-loader`（webpack5 换成内置的 asset/source）进行内联，css 采用 `style-loader`进行内联。配置如下：
+
+```javascript
+// webpack配置文件 webpack.config.js
+module.exports = {
+  module: {
+    rules: [
+      // html、js内联
+      {
+        resourceQuery: /raw/, // 查询参数带有raw后缀
+        type: 'asset/source',
+      },
+      // 图片资源小于10kb内联
+      {
+        test: /\.(png|jpg|gif)$/i,
+        use: [
+          {
+            loader: 'url-loader',
+            options: {
+              limit: 1024 * 10,
+              name: 'img/[name]_[hash:8].[ext]',
+            },
+          },
+        ],
+      },
+      // css内联
+      {
+        test: /\.css$/i,
+        use: ['style-loader', 'css-loader', 'postcss-loader'],
+      },
+    ],
+  },
+};
+```
+
+```html
+<!-- index.html 入口文件-->
+<!DOCTYPE html>
+<html lang="en">
+  <head>
+    <!-- 内联本地的 inline.html -->
+    <%= require('./inline.html?raw') %>
+    <!-- 内联本地的lodash-es -->
+    <script>
+      <%= require('./node_modules/lodash-es/cloneDeep.js?raw') %>
+    </script>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <title>Hello Webpack</title>
+  </head>
+  <body>
+    <div class="box">测试标题</div>
+  </body>
+</html>
+```
+
+<div align="center"> <img src="http://dwc-images-store.oss-cn-beijing.aliyuncs.com/images/20250504175242.png"/> </div>
+
 ### 1.3 plugin
 
 **plugin** 作用于 webpack 构建全过程中，通常用于 bundle 文件优化、资源管理和环境变量注入。

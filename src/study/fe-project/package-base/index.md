@@ -43,7 +43,7 @@ console.log(square(3));
 
 观察模块化的特点，独立命名空间、高内聚低耦合...这不就是实现一个类吗？没错，一个类就是一个模块，但是原生 JS 并不支持类定义（虽然 ES6 支持了类，但是还不普及），问题就转变为了：**如何在 JS 中模拟类？**
 
-::: details 模块化基石：IIFE 模式
+::: details 模块化基石：IIFE 模式 {#IIFE}
 **IIFE 模式（Immediately Invoked Function Expression）**
 
 IIFE 即立即执行函数，在 JS 中除了 `全局作用域` 之外的独立作用域就是 `函数作用域`（当然 ES6 中又引入了用 let 创造 `块级作用域` ）。我们想创建一个独立的命名空间，只能先创建一个独立的函数作用域，然后又得保证其执行上下文不能被立即销毁。这不正符合 **闭包** 的特性吗？
@@ -384,12 +384,12 @@ console.log(square(3));
 9
 ```
 
-::: details ES6 Module 和 CommonJS 的区别
+::: details ES6 Module 和 CommonJS 的区别 {#es6&commonjs}
 
 ES6 Module 是面向浏览器端和服务端的通用模块化规范，其与面向服务端的 CommonJS 规范有以下区别：
 
 - 1. `模块的加载方式不同`: ES6 Module 是依赖前置，CommonJS 是依赖就近；（ES6 Module 由于考虑浏览器端模块资源需要从服务端获取，所以必须提前加载所有模块，再执行业务代码；而 CommonJS 由于考虑服务端编程，模块资源存储于本地磁盘中，加载速度较快，所以可以按需加载模块，和业务代码穿插执行；）
-- 2. `模块的解析方式不同`：ES6 Module 是静态分析，CommonJS 是动态分析；（ES Module `import` 的 是一个接口定义，JS 引擎在编译阶段可以通过接口定义，静态解析出模块间的依赖关系， 而 CommonJS `require` 的是一个对象 module.exports, 该对象只有等脚本运行完才会生成导出，只有在脚本运行时才能解析出模块间的依赖关系）
+- 2. `模块的解析方式不同`：ES6 Module 是静态分析，CommonJS 是动态分析；（ES Module `import` 的是一个接口定义，JS 引擎在编译阶段可以通过接口定义，静态解析出模块间的依赖关系， 而 CommonJS `require` 的是一个对象 module.exports, 该对象只有等脚本运行完才会生成导出，只有在脚本运行时才能解析出模块间的依赖关系）
 - 3. `模块的输出不同`：这点只针对基础类型数据，ES6 Module 输出的是基础类型值的引用，而 CommonJS 输出的是基础类型值的拷贝；
 
 关于第 3 点，可以示例如下：

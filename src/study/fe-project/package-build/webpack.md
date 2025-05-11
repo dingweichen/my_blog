@@ -749,11 +749,31 @@ module.exports = {
         new webpack.HotModuleReplacementPlugin();
     ],
     devServer:{
-        contentBase: './dist',
+        static: {
+            directory: path.join(__dirname, 'dist'),
+        },
         hot: true
     }
 }
 ```
+
+热更新只在 html、css 修改时生效，js 代码实现热更新需编写 hmr 接受逻辑：
+
+```javascript
+// 入口文件：index.js
+import { sum } from './math';
+
+// 增加，热更新被执行的回调函数
+if (module.hot) {
+  // 确定代码开启热更新后，配置启动热更新的模块，一旦这些模块被改变，则执行回调函数
+  module.hot.accept(['./math'], () => {
+    const sumRes = sum(10, 30);
+    console.loh('监听到math文件被修改，热更新已启动');
+  });
+}
+```
+
+框架（如 React、Vue）有对应的 HMR 插件（如 react-hot-loader、@vue/cli-service 内置支持）。
 
 **热更新的实现原理：** [详情](https://juejin.cn/post/7292427026873696296)
 
@@ -844,9 +864,9 @@ module.exports = {
 
 ## 2.高级配置
 
-### 2.1 多入口
+### 2.1 配置多入口（MPA）
 
-​ 在项目有多个入口文件情况下，可以配置 webpack 如下：
+​ 在项目有多个入口文件情况下（一般是 MPA），可以配置 webpack 如下：
 
 ```javascript
 // webpack配置文件
@@ -862,7 +882,7 @@ module.exports = {
   },
   // 2. 配置出口文件路径
   output: {
-    filename: '[name].[contentHash:8].js', // name 即为上面entry的属性名
+    filename: '[name].[chunkhash:8].js', // name 即为上面entry的属性名
     path: distPath,
   },
   // 3. 配置HTML插件
@@ -885,11 +905,130 @@ module.exports = {
 
 <div align="center"> <img src="http://dwc-images-store.oss-cn-beijing.aliyuncs.com/images/image-20220620214616509_vaBFIbRtnB.png"/> </div>
 
-### 2.2 抽离公共代码
+上述配置项得为每个入口配置一次，将上述配置改为更通用的配置写法：
+
+```javascript{8,27,46,51,86}
+const path = require('path');
+const glob = require('glob');
+const HtmlWebpackPlugin = require('html-webpack-plugin');
+const MiniCssExtractPlugin = require('mini-css-extract-plugin');
+const OptimizeCSSAssetsPlugin = require('optimize-css-assets-webpack-plugin');
+const { CleanWebpackPlugin } = require('clean-webpack-plugin');
+
+// 多入口打包通用配置
+const setMPA = () => {
+  const entry = {};
+  const htmlWebpackPlugins = [];
+
+  const entryFiles = glob.sync(path.join(__dirname, './src/*/index.js'));
+
+  entryFiles.forEach(entryFile => {
+    const match = entryFile.match(/src\/(.*)\/index\.js/); // 获取页面名称，页面结构必须是/src/*/index.js 形式
+    const pageName = match && match[1];
+
+    // 1. 配置入口文件path
+    entry[pageName] = entryFile;
+
+    // 2.配置htmlWebpackPlugin
+    htmlWebpackPlugins.push(
+      new HtmlWebpackPlugin({
+        template: `src/${pageName}/index.html`,
+        filename: `${pageName}.html`,
+        chunks: [pageName], // 约束当前pageName页面的引入chunk，否则所有的chunk都会引入其中
+        minify: {
+          html5: true,
+          collapseWhitespace: true,
+          preserveLineBreaks: false,
+          minifyCSS: true,
+          minifyJS: true,
+          removeComments: false,
+        },
+      })
+    );
+  });
+
+  return {
+    entry,
+    htmlWebpackPlugins,
+  };
+};
+
+const { entry, htmlWebpackPlugins } = setMPA();
+
+module.exports = {
+  mode: 'production',
+  watch: false,
+  entry: entry,
+  output: {
+    path: path.resolve(__dirname, 'dist'),
+    filename: '[name]_[chunkhash:8].js',
+  },
+  module: {
+    rules: [
+      {
+        test: /\.(png|jpg|gif)$/i,
+        use: [
+          {
+            loader: 'url-loader',
+            options: {
+              limit: 1024 * 10,
+              name: 'img/[name]_[hash:8].[ext]',
+            },
+          },
+        ],
+      },
+      {
+        test: /\.css$/i,
+        use: [MiniCssExtractPlugin.loader, 'css-loader', 'postcss-loader'],
+      },
+      {
+        test: /\.less$/i,
+        use: [
+          MiniCssExtractPlugin.loader,
+          'css-loader',
+          'less-loader',
+          'postcss-loader',
+        ],
+      },
+    ],
+  },
+  plugins: [
+    ...htmlWebpackPlugins,
+    new CleanWebpackPlugin(),
+    new MiniCssExtractPlugin({
+      filename: 'style/index_[contenthash:8].css',
+    }),
+    new OptimizeCSSAssetsPlugin({
+      assertNameRegExp: /\.css$/g,
+    }),
+  ],
+};
+```
+
+<div align="center"> <img src="http://dwc-images-store.oss-cn-beijing.aliyuncs.com/images/20250510143414.png" width="50%" /> </div>
+
+### 2.2 配置 Source Map
+
+`SourceMap` 是一个记录了 `打包代码 -> 源代码` 映射关系的文件，内容是一个 JS 对象，更多内容可查看 [JavaScript Source Map 详解](https://www.ruanyifeng.com/blog/2013/01/javascript_source_map.html)。
+
+关于 webpack 如何生成 source map，配置项（[详细配置](https://webpack.docschina.org/configuration/devtool/#root)）如下：
+
+```javascript
+module.exports = {
+  mode: 'development',
+  devtool: 'source-map',
+};
+```
+
+效果如下图：
+
+<div align="center"> <img src="http://dwc-images-store.oss-cn-beijing.aliyuncs.com/images/20250510155646.png" width="70%"/> </div>
+
+### 2.3 配置抽离公共代码
 
 ​ 在项目中，一个模块可能被其他很多模块都引用到。如果将公共模块都打包入其他模块中，会导致打包文件过于臃肿。此外，一旦其他模块有微小的改动，公共模块就得跟着该模块重新再打包一次，这样无疑是十分耗时的。这些公共模块被分为两类：自己写的模块称为 `公共模块`，第三方引入的模块称为 `第三方模块`。
 
-​ 在 webpack.config.js 中配置文件抽离：
+​ 在 webpack.config.js 中配置文件抽离 [详细配置](https://webpack.docschina.org/plugins/split-chunks-plugin/#root)，通过自动分析项目中 import 语句匹配对应 splitChunks 规则：
 
 ```javascript
 // webpack配置文件
@@ -925,13 +1064,13 @@ module.exports = {
 
 <div align="center"> <img src="http://dwc-images-store.oss-cn-beijing.aliyuncs.com/images/image-20220621100244396_QzS9aEBRc2.png"/> </div>
 
-### 2.3 懒加载
+### 2.3 配置模块懒加载
 
 ​ 懒加载是一个通用的概念，在 vue 引入子组件或者 vue-router 路由切换组件中，我们都使用过懒加载。懒加载实际上就是按需加载，或者称为异步加载。
 
 ​ 懒加载并不是 webpack 定义的功能，但是 webpack 支持并检测这种写法：
 
-```javascript
+```javascript{6-9}
 // 入口文件 index.js
 import _ from './src/untils'; // 正常引用
 
@@ -944,7 +1083,7 @@ setTimeout(() => {
 }, 1500);
 ```
 
-懒加载的模块会被 webpack 抽离，作为一个单独的 bundle 文件等待浏览器请求：
+**懒加载的模块会被 webpack 抽离，作为一个单独的 bundle 文件等待浏览器请求：**
 
 <div align="center"> <img src="http://dwc-images-store.oss-cn-beijing.aliyuncs.com/images/image-20220621113241550_uv47_tx7-t.png"/> </div>
 
@@ -955,7 +1094,7 @@ setTimeout(() => {
 - `bundle`：bundle 即是 chunk 最终输出的打包文件，一个 chunk 对应一个 bundle。
   :::
 
-<div align="center"> <img src="http://dwc-images-store.oss-cn-beijing.aliyuncs.com/images/image-20220621111704535_36U-c9nYmi.png"/> </div>
+<div align="center" > <img src="http://dwc-images-store.oss-cn-beijing.aliyuncs.com/images/image-20220621111704535_36U-c9nYmi.png" /> </div>
 
 ## 3. 性能优化
 
@@ -1183,50 +1322,6 @@ module.exports = {
 </html>
 ```
 
-#### 热更新
-
-​ 在开发环境下，每次修改代码， `web-dev-server` 都会自动刷新页面。普通的自动刷新会刷新整个页面，同时全局环境中保留的状态也会丢失。热更新实现了在新代码生效的同时，网页不会刷新，全局环境中的状态也不会丢失。
-
-​ 在 webpack.dev.js (只用于开发环境) 中配置热更新：
-
-```javascript
-const HotModuleReplacementPlugin = require('webpack/lib/HotModuleReplacementPlugin');
-
-module.exports = {
-  // 1. 入口配置热更新
-  entry: {
-    index: [
-      'webpack-dev-serve/client?http://localhost:8080/',
-      'webpack/hot/dev-server',
-      path.resolve(__dirname, '/src/index.js'),
-    ],
-  },
-  // 2. 配置热更新插件
-  plguins: [new HotModuleReplacementPlugin()],
-  // 3. 启用热更新
-  devServer: {
-    port: 8080,
-    hot: true,
-  },
-};
-```
-
-​ 热更新只在 html，css 修改时生效，如果想让 js 代码实现热更新，还需要额外的配置：
-
-```javascript
-// 入口文件：index.js
-import { sum } from './math';
-
-// 增加，热更新被执行的回调函数
-if (module.hot) {
-  // 确定代码开启热更新后，配置启动热更新的模块，一旦这些模块被改变，则执行回调函数
-  module.hot.accept(['./math'], () => {
-    const sumRes = sum(10, 30);
-    console.loh('监听到math文件被修改，热更新已启动');
-  });
-}
-```
-
 ### 3.2 优化产出代码
 
 ​ 产出代码即 webpack 打包后生成的打包文件，这些文件通常放在项目 dist 文件夹目录下，将 dist 文件夹放置在服务器上，即可给用户线上访问。 优化产出代码可以提高用户访问速度，通常解决网站首次加载过慢问题。常见的方式有以下几种：
@@ -1234,7 +1329,7 @@ if (module.hot) {
 - `缩小打包文件体积`：小图片采用 base64 编码，提取公共代码或第三方模块，打包文件压缩，IngorePlugin 减少第三方库语言版本
 - `缩短请求资源时延`：bundle 加 hash 提高缓存命中，懒加载，使用 CDN 加速
 
-#### production
+#### 3.2.1 Tree Shaking
 
 ​ `production` 是 webpack 的一种打包模式，在 webpack.prod.js（只用于生产环境）中配置 webpack 启用该模式进行打包：
 
@@ -1251,26 +1346,39 @@ module.exports = {
 - Vue，React 等会自动删掉调试代码（如开发环境的 warning）
 - 启动 Tree-Shaking
 
-> 📌Tree-Shaking 字面意思就是用力摇动一棵树，将联系不紧的叶子从树上甩掉。它在 webapack 中的作用是忽略引用模块中没有被调用的代码，从而减少打包文件的体积。**但是，只有采用 ES6 Module 写法的代码才能让 tree-shaking 生效。**
-> 因为 ES6 Module 引入模块的方式是静态引入，而 Commonjs 是动态引入，webpack 实际上就是对项目代码进行静态分析后再打包，所以 tree-shaking 只对 ES6 Module 生效。静态引入：在代码为执行前，入口文件就能确定引用的模块；动态引入：只有在代码执行过程中，入口文件才能确定引用了哪些模块。
+::: details Tree-Shaking
+`Tree-Shaking` 字面意思就是用力摇动一棵树，将联系不紧的叶子从树上甩掉。
 
-#### Scope Hosting
+在 webpack 中 1 个模块可能 import 了很多个方法，按照传统打包逻辑，只要其中某个方法使用到了，则整个文件会被打到 bundle 中去，tree-shaking 就是只把用到的方法打入 bundle，没用到的方法会在 uglify 阶段被擦除掉。
+
+**但是，只有采用 ES6 Module 写法的代码才能让 tree-shaking 生效。**
+
+因为 ES6 Module 引入模块的方式是静态引入，而 Commonjs 是动态引入[es module & cjs 的区别](/study/fe-project/package-base/#es6&commonjs)，webpack 实际上就是对项目代码进行静态分析后再打包，所以 tree-shaking 只对 ES6 Module 生效。
+
+- `静态引入`：在代码为执行前，入口文件就能确定引用的模块；
+- `动态引入`：只有在代码执行过程中，入口文件才能确定引用了哪些模块。
+
+:::
+
+#### 3.2.2 Scope Hosting
 
 ​ `Scope Hosting` 用于函数作用域合并，一个模块打包后是一个函数，合并作用域即意味者合并函数。如：
 
-<div align="center"> <img src="http://dwc-images-store.oss-cn-beijing.aliyuncs.com/images/image-20220621220610999_hYJ7uYMtEg.png"/> </div>
+<div align="center"> <img src="http://dwc-images-store.oss-cn-beijing.aliyuncs.com/images/image-20220621220610999_hYJ7uYMtEg.png" width="50%"/> </div>
 
-​ 入口文件 main.js 引用了 hello.js 中的代码，如果不采用 scope hosting 的话，打包文件会生成两个函数：
+​ 入口文件 main.js 引用了 hello.js 中的代码，如果不采用 scope hosting 的话，打包文件会生成两个闭包函数[IIFE](/study/fe-project/package-base/#IIFE)：
 
 <div align="center"> <img src="http://dwc-images-store.oss-cn-beijing.aliyuncs.com/images/image-20220621220742148_6hgC5Md0wC.png"/> </div>
 
-​ 这样会使得代码过于冗余，同时每执行一个函数会开辟一个活动对象，函数过多可能会导致调用栈溢出。所以采用 Scope Hosting 对打包文件进行合并：
+​ 如果模块过多，会使得 bundle 文件中包含大量闭包函数，文件体积过大。同时每执行一个闭包函数会开辟一个活动对象，闭包函数过多可能会导致调用栈溢出。
+
+**所以采用 Scope Hosting 对打包文件进行合并：**
 
 <div align="center"> <img src="http://dwc-images-store.oss-cn-beijing.aliyuncs.com/images/image-20220621220934184_yelvOolv0r.png"/> </div>
 
-​ 这样使得打包文件的代码体积更小，创建活动对象更少，代码可读性更好。
+​ 将只被 import 一次的模块代码内联进入口文件，函数作用域合并；这样使得打包文件的代码体积更小，创建活动对象更少，代码可读性更好。
 
-在 webpack.prod.js 中配置 Scope Hosting：
+**在 webpack4 以上版本，production 模式默认开启 Scope Hoisting。低版本在 webpack.prod.js 中配置 Scope Hosting：**
 
 ```javascript
 // webpack.prod.js

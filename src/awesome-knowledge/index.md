@@ -9,6 +9,7 @@
 ## AI
 
 - [AI 编程神器 Cursor 十大使用技巧：让代码更听你的话](https://mp.weixin.qq.com/s/X7cI-yScBrqUvMXd_S1PWQ)
+- [MCP 在蚂蚁前端的落地之旅](https://mp.weixin.qq.com/s/CdCvCzfycme6rw4OKa_1aA)
 
 
 ## 部署CI/CD

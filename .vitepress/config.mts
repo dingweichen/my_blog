@@ -114,6 +114,16 @@ export default defineConfig({
             },
           ],
         },
+        {
+          text: 'AI',
+          items: [
+            {
+              text: '工作流',
+              items: [{ text: 'Dify 解析', link: '/study/ai/workflow/dify' }],
+              // collapsed: true,
+            },
+          ],
+        },
       ],
     },
 

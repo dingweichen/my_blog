@@ -22,7 +22,22 @@
 - 视频：[超越界面：前端工程师如何塑造 AI 原生应用的未来 - 吴天炜](https://fedev.cn/video/play/701606bc91638d618ac990493a4972c8)
 - PDF：[超越界面：前端工程师如何塑造 AI 原生应用的未来](https://github.com/fequancom/FEDAY/blob/main/2025/feday2025-%E8%B6%85%E8%B6%8A%E7%95%8C%E9%9D%A2%EF%BC%9A%E5%89%8D%E7%AB%AF%E5%B7%A5%E7%A8%8B%E5%B8%88%E5%A6%82%E4%BD%95%E5%A1%91%E9%80%A0%20AI%20%E5%8E%9F%E7%94%9F%E5%BA%94%E7%94%A8%E7%9A%84%E6%9C%AA%E6%9D%A5.pdf)
 
+下图是作者对 Dify Workflow 前端的总结：
+<div align="center"> <img src="http://dwc-images-store.oss-cn-beijing.aliyuncs.com/images/20260103162030.png"/> </div>
+
 ### 前端架构
+
+为了循序渐进解读 Dify 工作流的前端逻辑，笔者按个人理解将业务代码分为以下 6 层：
+
+<div align="center"> <img src="http://dwc-images-store.oss-cn-beijing.aliyuncs.com/images/20260103165459.png"/> </div>
+
+
+- 路由层：解释用户请求如何获取入口文件，并在浏览器渲染出整个 workflow 页面；
+- 绘制层：解释如何实现 workflow 的 Canvas 层，允许用户拖拽编排 workflow 并同步至后端；
+- 执行层：解释用户在界面点击运行 workflow 后，前端做了哪些工作展示其运行流程；
+- 变量系统：解释 workflow 如何在节点间进行信息传递；
+- 状态管理：解释 workflow 前端整个 stores 的管理逻辑；
+- 应用层：解释 workflow 如何实现基础能力（编排、运行）之外的补充能力（调试、版本控制等）
 
 ### 2.1 路由层
 

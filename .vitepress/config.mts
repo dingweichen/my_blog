@@ -1,7 +1,8 @@
-import { defineConfig } from 'vitepress';
+// import { defineConfig } from 'vitepress';
+import { withMermaid } from 'vitepress-plugin-mermaid';
 
 // https://vitepress.dev/reference/site-config
-export default defineConfig({
+export default withMermaid({
   title: "Weichen's blog",
   description: 'study documents',
   base: '/my_blog/',
@@ -157,5 +158,12 @@ export default defineConfig({
     image: {
       lazyLoading: true,
     },
+  },
+  mermaid: {
+    // 可选：Mermaid 配置选项
+  },
+  mermaidPlugin: {
+    // 可选：Mermaid 插件配置
+    class: 'mermaid',
   },
 });

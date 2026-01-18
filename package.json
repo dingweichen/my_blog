@@ -1,8 +1,7 @@
 {
   "devDependencies": {
     "mermaid": "^11.12.2",
-    "vitepress": "^1.3.1",
-    "vitepress-plugin-mermaid": "^2.0.17"
+    "vitepress": "^1.3.1"
   },
   "scripts": {
     "docs:dev": "vitepress dev",
@@ -11,6 +10,7 @@
   },
   "dependencies": {
     "markdown-it-mathjax3": "^4.3.2",
+    "vitepress-plugin-mermaid": "^2.0.17",
     "vitepress-plugin-mermaid-pan-zoom": "^1.0.2",
     "xmind-embed-viewer": "^1.2.0"
   }

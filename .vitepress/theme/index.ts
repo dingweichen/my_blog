@@ -1,7 +1,7 @@
 import type { Theme } from 'vitepress';
 import DefaultTheme from 'vitepress/theme';
-import { useMermaidPanZoom } from 'vitepress-plugin-mermaid-pan-zoom';
-import 'vitepress-plugin-mermaid-pan-zoom/dist/style.css';
+import { useMermaidPanZoom } from './components/vitepress-plugin-mermaid-pan-zoom/index';
+import './components/vitepress-plugin-mermaid-pan-zoom/style.css';
 
 // 自定义组件
 import OrangeText from './components/orange-text.vue';

@@ -8,7 +8,10 @@ let path = [],
 
 function backTrace(args) {
     // 出口
-    if (...) return; // 结果在叶子节点 result.push([...path])
+    result.push([...path]) // 情况 1，结果产出在所有节点
+    if (...) 
+      // result.push([...path]) // 情况 2，结果只产出在叶节点
+    return; 
 
         for (let i = 0; i < args.length; i++) {
         // 确定当前选项
@@ -19,7 +22,10 @@ function backTrace(args) {
         // 选择：当前选项加入path
         path.push(curItem);
         // 递归
-        backTrace(args.slice(i or i + 1)); // 结果在所有节点 result.push([...path])
+        const leftOptions = args.slice(i + 1); // 情况 1，不选择 path 已经选过的元素，避免 path 出现重复组合（比如 12，21 是同一元素）
+        /* const leftOptions = [...args]
+        leftOptions.split(i, 1); // 情况 2，选择 path 已经选过的元素，允许出现重复组合（比如 12，21 不是同一元素） */
+        backTrace(leftOptions); 
         // 取消选择(回溯)：当前选项弹出path
         path.pop();
     }

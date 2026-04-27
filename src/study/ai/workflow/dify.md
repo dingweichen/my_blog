@@ -264,6 +264,197 @@ sequenceDiagram
     Browser->>Browser: React Hydration
     Browser->>Component: 执行客户端逻辑
 ```
+上图是入口文件 index.html 请求到返回的整个流程图，最终页面渲染的是工作流 WorkflowApp 组件，即工作流整张画布视图。观察用户请求 url `https://origin.com/app/{appId}/workflow?paramA=xxx&paramB=yyy` 和流程图会发现文件是按照 url 的 path 逐步加载的，所以其 index.html 文件内容也是按照 path 逐步加载。
+
+::: tip
+**1. 为什么文件会按照 url 的 path 逐步解析加载？**
+ 
+  查阅 [官方文档](https://nextjscn.org/docs/app/getting-started/layouts-and-pages) ，next.js 使用的 是基于文件的路由模式，包含 pages-router 和 app-router 两种方式，后者逐渐将前者替换，项目中使用 app-router 模式。app-router 模式有以下特点：
+  
+  - **`app` 为根路径**：项目中必须包含 /app 文件夹，其定义了项目的入口文件 layout.tsx 和 page.tsx：
+    - `layout.tsx`: 通常包含页面的布局，状态管理，其内容具备持久化的特性，在页面切换路由时 layout 不会重新渲染。默认会把同目录下的 page.tsx 文件作为 children 载入。
+    - `page.tsx`: 页面实际渲染的内容。
+
+  - **path 和 文件夹名称应该一一对应，文件夹下只有 page.tsx 内容会被返回给客户端。** 例如 url 中 /app/blog 路径 对应的是 /app 和 /app/blog 文件夹下的 page.tsx文件。
+
+:::
+
+观察浏览器拿到的入口文件 html 内容：
+``` html
+<html lang="zh-Hans" class="h-full">
+    <head>
+        <meta charSet="utf-8"/>
+        <meta name="viewport" content="width=device-width, initial-scale=1, maximum-scale=1, viewport-fit=cover, user-scalable=no"/>
+        <link rel="stylesheet" href="/workflow-df-new/_next/static/css/0b6c82cd8266984c.css" data-precedence="next"/>
+        <!-- 剩余 css chunk 导入... -->
+        <script src="/workflow-df-new/_next/static/chunks/7aab8a33-9db54bd204dcd9b2.js" async=""></script>
+        <!-- 剩余 js chunk 导入... -->
+        <link rel="preload" href="/workflow-df-new/_next/static/css/25747ad1f8ee13b4.css" as="style"/>
+        <!-- 剩余 preload css chunk 导入... -->
+        <meta name="theme-color" content="#FFFFFF"/>
+        <meta name="mobile-web-app-capable" content="yes"/>
+        <meta name="apple-mobile-web-app-capable" content="yes"/>
+        <meta name="apple-mobile-web-app-status-bar-style" content="default"/>
+        <title>万擎</title>
+        <script src="/workflow-df-new/_next/static/chunks/polyfills-42372ed130431b0a.js" noModule=""></script>
+    </head>
+    <body class="color-scheme h-full select-auto" data-api-prefix="https://wanqing.corp.kuaishou.com/api/workflow/console/api" data-web-prefix="https://wanqing.corp.kuaishou.com/workflow-df-new" data-pubic-api-prefix="https://wanqing.corp.kuaishou.com/api/workflow/api" data-marketplace-api-prefix="https://wanqing.corp.kuaishou.com/mcp/list/api/v1" data-marketplace-url-prefix="https://wanqing.corp.kuaishou.com/mcp/list" data-public-edition="SELF_HOSTED" data-public-sentry-dsn="" data-public-site-about="" data-public-text-generation-timeout-ms="" data-public-max-tools-num="" data-public-max-parallel-limit="20" data-public-top-k-max-value="" data-public-indexing-max-segmentation-tokens-length="" data-public-loop-node-max-count="" data-public-max-iterations-num="" data-public-enable-website-jinareader="true" data-public-enable-website-firecrawl="true" data-public-enable-website-watercrawl="true">
+        <div hidden="">
+        <!--$-->
+        <!--/$-->
+        </div>
+        <script>
+            ( (a, b, c, d, e, f, g, h) => {
+                let i = document.documentElement
+                  , j = ["light", "dark"];
+                function k(b) {
+                    var c;
+                    (Array.isArray(a) ? a : [a]).forEach(a => {
+                        let c = "class" === a
+                          , d = c && f ? e.map(a => f[a] || a) : e;
+                        c ? (i.classList.remove(...d),
+                        i.classList.add(f && f[b] ? f[b] : b)) : i.setAttribute(a, b)
+                    }
+                    ),
+                    c = b,
+                    h && j.includes(c) && (i.style.colorScheme = c)
+                }
+                if (d)
+                    k(d);
+                else
+                    try {
+                        let a = localStorage.getItem(b) || c
+                          , d = g && "system" === a ? window.matchMedia("(prefers-color-scheme: dark)").matches ? "dark" : "light" : a;
+                        k(d)
+                    } catch (a) {}
+            }
+            )("data-theme", "theme", "light", "light", ["light", "dark"], null, true, true)
+        </script>
+        <div class="flex w-full items-center justify-center h-full ">
+            <div class="ant-spin ant-spin-spinning css-tchc97 css-var-_R_9db_" aria-live="polite" aria-busy="true">
+                <span class="ant-spin-dot-holder">
+                    <span class="ant-spin-dot ant-spin-dot-spin">
+                        <i class="ant-spin-dot-item"></i>
+                        <i class="ant-spin-dot-item"></i>
+                        <i class="ant-spin-dot-item"></i>
+                        <i class="ant-spin-dot-item"></i>
+                    </span>
+                </span>
+            </div>
+        </div>
+        <script src="/workflow-df-new/_next/static/chunks/webpack-59ae8763659d8ae2.js" id="_R_" async=""></script>
+        <script>
+            (self.__next_f = self.__next_f || []).push([0])
+        </script>
+        <script>
+            self.__next_f.push([1, "1:\"$Sreact.fragment\"\n"])
+        </script>
+        <script>
+            self.__next_f.push([1, "3:I[21947,[\"3977\",\"static/chunks/392e555d-3b4326cb9fab1284.js\",\"1704\",\"static/chunks/39231027-ea43f00c801eb2a8.js\",\"8226\",\"static/chunks/8c5afdf4-4c810da4eec2bcee.js\",\"8733\",\"static/chunks/bda40ab4-0d9c60127404663f.js\",\"7326\",\"static/chunks/fc43f782-ceebcfac1567e8cc.js\",\"6640\",\"static/chunks/1471f7b3-fbc0c70f3343877a.js\",\"6518\",\"static/chunks/9c9bef96-98ae838928f2d690.js\",\"86\",\"static/chunks/d3d642e5-f7a4a4857812044b.js\",\"4260\",\"static/chunks/4f2365cb-e4a2ad1f2c319bec.js\",\"4277\",\"static/chunks/72a272a0-7fb8920f52d3a144.js\",\"9423\",\"static/chunks/a010a182-e1f2d91eecc27c2f.js\",\"1562\",\"static/chunks/1562-b1faeca6d0858fe1.js\",\"7318\",\"static/chunks/7318-761be5e277b14d2b.js\",\"6536\",\"static/chunks/6536-39734acef4b6e53c.js\",\"3771\",\"static/chunks/3771-28a09f3256a156a5.js\",\"6841\",\"static/chunks/6841-5cb9c00d8f656c63.js\",\"1162\",\"static/chunks/1162-ebdc371e325b956f.js\",\"6553\",\"static/chunks/6553-702945124b8c4e39.js\",\"3651\",\"static/chunks/3651-a0d2562a98a488ba.js\",\"1730\",\"static/chunks/1730-349f251213689e9a.js\",\"5290\",\"static/chunks/5290-12863c4bce6a28ee.js\",\"427\",\"static/chunks/427-10341fb48467793e.js\",\"2923\",\"static/chunks/2923-d446f9302091bb3d.js\",\"6252\",\"static/chunks/6252-f359ac2f4182cf6e.js\",\"2641\",\"static/chunks/2641-4c0fb313afc938fa.js\",\"8652\",\"static/chunks/8652-39504771ef364941.js\",\"2479\",\"static/chunks/2479-ba8ab4b8e3092aea.js\",\"4724\",\"static/chunks/4724-f3953a02c2481dce.js\",\"1528\",\"static/chunks/1528-8029d33163541a54.js\",\"5495\",\"static/chunks/5495-54fbacc38cce9082.js\",\"3192\",\"static/chunks/3192-d109d558367d8dc3.js\",\"156\",\"static/chunks/156-e7feeedab40f0743.js\",\"245\",\"static/chunks/245-6589b35fd319f60f.js\",\"3267\",\"static/chunks/3267-5720985e8a6b90f3.js\",\"1947\",\"static/chunks/1947-26b8bd2bc6ca35f4.js\",\"3284\",\"static/chunks/3284-42c9375899481ea8.js\",\"2706\",\"static/chunks/2706-36182763cd5e9dd0.js\",\"3949\",\"static/chunks/3949-4456cd9c98425241.js\",\"8018\",\"static/chunks/app/(commonLayout)/layout-eb0d13a098fd97fe.js\"],\"AppContextProvider\"]\n"])
+        </script>
+        <!-- 剩余 Streaming SSR（流式服务渲染）chunk 导入... -->
+        <script>
+            self.__next_f.push([1, "18:[[\"$\",\"meta\",\"0\",{\"charSet\":\"utf-8\"}],[\"$\",\"meta\",\"1\",{\"name\":\"viewport\",\"content\":\"width=device-width, initial-scale=1, maximum-scale=1, viewport-fit=cover, user-scalable=no\"}]]\n14:null\n16:{\"metadata\":[[\"$\",\"title\",\"0\",{\"children\":\"万擎\"}]],\"error\":null,\"digest\":\"$undefined\"}\n1b:\"$16:metadata\"\n"])
+        </script>
+        <script type="text/javascript" src="/accessproxy_statics/h5_fp.js" defer></script>
+        <script type="text/javascript" src="/accessproxy_statics/wm.js" defer></script>
+        <script type="text/javascript" src="/accessproxy_statics/chrome_banner.js" defer></script>
+    </body>
+</html>
+```
+
+观察 index.html 文件可以发现，虽然入口文件是 HTTP 服务器通过脚本动态生成的（SSR），但其引用的静态资源 chunk 是 docker 容器 build 阶段通过前端打包工具（如 webpack）打包生成，被所有 SSR 请求重复使用。
+
+::: tip
+**1. SSR 的多实例部署问题如何解决？**
+
+**问题背景：** 前端上线往往会采用分级发布方式，假设前端容器有 instance1，instance2 两个实例，instance1 上部署最新版本 version2 时，instance2 上仍运行着旧版本 version1。此时如果用户请求打入 instance1 通过 version2 SSR 返回的 index.html 中内联了 chunk 文件（如 main.abc123.js），而该 chunk 文件的 fetch 请求打入了 instance2 ( chunk 文件在 version2 中发生了变更，则可能导致 instance1 和 instance2 同时存在不同版本的 chunk 文件)，从而引发兼容性问题，导致页面白屏。
+
+**解决方案：** 版本化静态资源路径 + 静态资源上传至 cdn。核心要点：
+1. 静态资源走 CDN，版本化路径；
+2. SSR 时根据当前版本输出对应 CDN URL；
+3. 老版本资源保留一段时间（缓存过期）。
+
+**2. 什么是 前端水合（Hydration）？**
+
+ 水合是前端 SSR 渲染特有的机制，服务端生成静态 html 返回给浏览器渲染后，浏览器 fetch JS Chunk 对页面 DOM 挂载交互事件的过程被称为 “水合”。参考 [什么是前端水合？](https://juejin.cn/post/7609743163905900563)
+
+```bash
+┌─────────────────────────────────────────────────────────────┐
+│                   完整渲染流程                                │
+└─────────────────────────────────────────────────────────────┘
+
+1️⃣ 服务器渲染阶段
+┌──────────────┐
+│  React 组件   │
+│  function()  │
+└──────┬───────┘
+       │
+       ▼
+  renderToString()
+       │
+       ▼
+┌──────────────┐     ┌──────────────┐
+│  HTML 字符串  │ →   │  发送给浏览器  │
+└──────────────┘     └──────────────┘
+
+2️⃣ 浏览器接收阶段
+┌──────────────┐
+│  接收 HTML    │ ← 用户能看到页面（但不能交互）
+└──────┬───────┘
+       │
+       ▼
+┌──────────────┐
+│  解析并渲染    │
+│  构建 DOM 树  │
+└──────┬───────┘
+       │
+       ▼
+┌──────────────┐
+│ 下载 JS 文件  │
+└──────┬───────┘
+
+3️⃣ 水合阶段
+       │
+       ▼
+┌──────────────┐
+│ 执行 JS 代码  │
+│ React 初始化  │
+└──────┬───────┘
+       │
+       ▼
+  hydrateRoot()
+       │
+       ├─→ 重新执行组件函数
+       │   生成虚拟 DOM
+       │
+       ├─→ 对比服务器 HTML
+       │   和虚拟 DOM
+       │
+       │   ✅ 匹配？
+       │   ├─ Yes → 复用 DOM + 绑定事件
+       │   └─ No  → ⚠️ 报错 + 强制重新渲染
+       │
+       └─→ 绑定事件监听器
+           初始化状态管理
+
+4️⃣ 可交互阶段
+┌──────────────┐
+│  页面完全激活  │ ← 用户可以点击、输入
+└──────────────┘
+       │
+       ▼
+  后续正常的 React 更新流程
+```
+**水合问题：** 通常指的是客户端执行 JS 生成的虚拟 DOM 和 服务端渲染的 html DOM 结构不一致。导致水合问题的根因有很多，例如：1. DOM 中包含生成时间戳代码 2. DOM中包含生成随机值代码 3. useEffect 的执行时机 ...
+
+next.js 项目大多是 SSR 渲染，引入 App Router 后，采用 RSC 渲染比较多。其他的前端渲染机制可参考：[理解 Next.js 的 CSR、SSR、SSG、ISR、RSC、SPA、Streaming SSR 等概念](https://yayujs.com/nextjs/01-%E7%90%86%E8%A7%A3-nextjs-%E7%9A%84-csrssrssgisrrscspastreaming-ssr-%E7%AD%89%E6%A6%82%E5%BF%B5/)
+
+:::
+
+
+
+
 
 
 ### 2.2 绘制层

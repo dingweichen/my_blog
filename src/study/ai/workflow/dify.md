@@ -452,12 +452,371 @@ next.js 项目大多是 SSR 渲染，引入 App Router 后，采用 RSC 渲染�
 
 :::
 
-
-
-
-
-
 ### 2.2 绘制层
+上一章我们讲的是用户如何通过浏览器发送请求，获取页面资源并解析执行，最终获取的是入口文件 `app/(commonLayout)/app/(appDetailLayout)/[appId]/workflow/page.tsx`。
+本章我们进入核心的“绘制层”。绘制层解释的问题是：如何实现 workflow 在画布上的绘制？允许用户拖拽编排节点并同步至后端存储后，前端获取渲染。
+
+```mermaid
+sequenceDiagram
+    participant API as 🌐 API Service
+    participant Hook as 🪝 useWorkflow Hook
+    participant Store as 🏪 Zustand Store
+    participant RF as 📊 ReactFlow
+    participant Node as 🎨 CustomNode
+    participant Edge as 🔗 CustomEdge
+    participant Panel as 📋 Node Panel
+    participant User as 👤 User
+    
+    Note over API,User: 1️⃣ 初始化加载阶段
+    
+    Hook->>API: fetchWorkflowDraft(appId)
+    API-->>Hook: 返回 DSL 数据<br/>{nodes, edges, features}
+    
+    Hook->>Store: 初始化 Store
+    Store->>Store: setNodes(dslNodes)<br/>setEdges(dslEdges)
+    
+    Note over API,User: 2️⃣ ReactFlow 初始化
+    
+    Hook->>RF: useNodesState(nodes)
+    Hook->>RF: useEdgesState(edges)
+    RF->>RF: 构建内部状态<br/>计算布局
+    
+    Note over API,User: 3️⃣ 节点渲染阶段
+    
+    RF->>Node: 遍历 nodes 渲染
+    loop 每个节点
+        Node->>Node: 根据 type 选择组件<br/>(LLM/HTTP/Tool...)
+        Node->>Node: 渲染节点 UI<br/>(标题/图标/状态)
+        Node->>Panel: 渲染配置面板<br/>(inputs/outputs)
+    end
+    
+    Note over API,User: 4️⃣ 边渲染阶段
+    
+    RF->>Edge: 遍历 edges 渲染
+    loop 每条边
+        Edge->>Edge: 计算路径<br/>(贝塞尔曲线)
+        Edge->>Edge: 应用样式<br/>(颜色/宽度)
+    end
+    
+    Note over API,User: 5️⃣ 用户交互阶段
+    
+    User->>Node: 拖拽节点
+    Node->>Store: handleNodeDrag(nodeId, position)
+    Store->>RF: setNodes(updatedNodes)
+    RF->>Node: 重新渲染节点
+    
+    User->>Node: 点击节点
+    Node->>Store: handleNodeSelect(nodeId)
+    Store->>Panel: 显示配置面板
+    Panel->>User: 展示节点配置表单
+    
+    User->>Panel: 修改节点配置
+    Panel->>Store: updateNodeData(nodeId, data)
+    Store->>Hook: debouncedSyncWorkflowDraft()
+    Hook->>API: 同步数据到服务器
+    
+    Note over API,User: 6️⃣ 持续更新循环
+    
+    Store->>RF: 状态变化
+    RF->>Node: 触发重新渲染
+    RF->>Edge: 触发重新渲染
+    Node->>User: 显示最新状态
+```
+
+```tsx
+// 入口文件： app/(commonLayout)/app/(appDetailLayout)/[appId]/workflow/page.tsx
+'use client'
+
+import WorkflowApp from '@/app/components/workflow-app'
+
+const Page = () => {
+  return (
+    <div className='h-full w-full overflow-x-auto'>
+      <WorkflowApp />
+    </div>
+  )
+}
+export default Page
+```
+
+```tsx
+// 主文件：app/components/workflow-app/index.tsx
+import WorkflowAppMain from './components/workflow-main'
+...
+
+const WorkflowAppWithAdditionalContext = () => {
+  // 阶段一：初始化数据
+  const {
+    data,
+    isLoading,
+  } = useWorkflowInit() // ➡️ 核心函数
+  const { data: fileUploadConfigResponse } = useSWR({ url: '/files/upload' }, fetchFileUploadConfig)
+
+  const nodesData = useMemo(() => {
+    if (data)
+      return initialNodes(data.graph.nodes, data.graph.edges)
+
+    return []
+  }, [data])
+  const edgesData = useMemo(() => {
+    if (data)
+      return initialEdges(data.graph.edges, data.graph.nodes)
+
+    return []
+  }, [data])
+
+  if (!data || isLoading) {
+    return (
+      <div className='relative flex h-full w-full items-center justify-center'>
+        <Loading />
+      </div>
+    )
+  }
+
+  // 初始化一些特征变量
+  const features = data.features || {}
+  const initialFeatures: FeaturesData = {
+    ...
+  }
+
+  return (
+    <WorkflowWithDefaultContext
+      edges={edgesData}
+      nodes={nodesData}
+    >
+      <FeaturesProvider features={initialFeatures}>
+        <WorkflowAppMain
+          nodes={nodesData}
+          edges={edgesData}
+          viewport={data.graph.viewport}
+        />
+      </FeaturesProvider>
+    </WorkflowWithDefaultContext>
+  )
+}
+
+const WorkflowAppWrapper = () => {
+  return (
+    <WorkflowContextProvider
+      injectWorkflowStoreSliceFn={createWorkflowSlice}
+    >
+      <WorkflowAppWithAdditionalContext />
+    </WorkflowContextProvider>
+  )
+}
+
+export default WorkflowAppWrapper
+
+```
+
+**1. 初始化数据**
+
+  第一阶段从后端获取数据，前端将数据存储在 Store 中准备渲染。查看核心 hook `useWorkflowInit`，前端通过 appId 从后端获取初始的 draft 数据（graph + 配置信息），注意后端会返回一个 draft 的 hash 摘要，该摘要唯一用于前端上报 draft 时告诉后端"我基于这个版本修改"，用于解决多人协同编辑问题。
+
+```tsx 
+// app/components/workflow-app/hooks/use-workflow-init.ts
+import type { Edge, Node } from '@/app/components/workflow/types'
+...
+
+export const useWorkflowInit = () => {
+  const workflowStore = useWorkflowStore()
+  const {
+    nodes: nodesTemplate,
+    edges: edgesTemplate,
+  } = useWorkflowTemplate()
+  const appDetail = useAppStore(state => state.appDetail)!
+  const setSyncWorkflowDraftHash = useStore(s => s.setSyncWorkflowDraftHash)
+  const [data, setData] = useState<FetchWorkflowDraftResponse>()
+  const [isLoading, setIsLoading] = useState(true)
+
+  useEffect(() => {
+    workflowStore.setState({ appId: appDetail.id, appName: appDetail.name })
+  }, [appDetail.id, workflowStore])
+
+  // ➡️ 核心函数
+  const handleGetInitialWorkflowData = useCallback(async () => {
+    try {
+      // fetch draft 数据
+      const res = await fetchWorkflowDraft(`/apps/${appDetail.id}/workflows/draft`)
+      setData(res)
+
+      // 设置变量信息
+      workflowStore.setState({
+        envSecrets: (res.environment_variables || []).filter(env => env.value_type === 'secret').reduce((acc, env) => {
+          acc[env.id] = env.value
+          return acc
+        }, {} as Record<string, string>),
+        environmentVariables: res.environment_variables?.map(env => env.value_type === 'secret' ? { ...env, value: '[__HIDDEN__]' } : env) || [],
+        conversationVariables: res.conversation_variables || [],
+        isWorkflowDataLoaded: true,
+      })
+
+      // 设置 store 值
+      setSyncWorkflowDraftHash(res.hash) // ❗️hash 值的作用是防止多人协同编辑问题，告诉后端"我基于这个版本修改"
+      setIsLoading(false)
+    }
+    catch (error: any) {
+      if (error && error.json && !error.bodyUsed && appDetail) {
+        error.json().then((err: any) => {
+          if (err.code === 'draft_workflow_not_exist') {
+            // 处理没有草稿的异常场景（如新建一条工作流），用前端预制模版做上报
+            const nodesData = isAdvancedChat ? nodesTemplate : []
+            const edgesData = isAdvancedChat ? edgesTemplate : []
+
+            syncWorkflowDraft({
+              url: `/apps/${appDetail.id}/workflows/draft`,
+              params: {
+                graph: {
+                  nodes: nodesData,
+                  edges: edgesData,
+                },
+                features: {
+                  retriever_resource: { enabled: true },
+                },
+                environment_variables: [],
+                conversation_variables: [],
+              },
+            }).then((res) => {
+              workflowStore.getState().setDraftUpdatedAt(res.updated_at)
+              setSyncWorkflowDraftHash(res.hash)
+              handleGetInitialWorkflowData() // 上报后递归调用，再出发初始化数据流程
+            })
+          }
+        })
+      }
+    }
+  }, [appDetail, nodesTemplate, edgesTemplate, workflowStore, setSyncWorkflowDraftHash])
+
+  useEffect(() => {
+    handleGetInitialWorkflowData()  // ➡️ 核心函数
+  }, [])
+
+  const handleFetchPreloadData = useCallback(async () => {
+    // 画布加载后获取一些预制数据，如各个节点的 config
+    ... 
+  }, [workflowStore, appDetail])
+
+  useEffect(() => {
+    handleFetchPreloadData()
+  }, [handleFetchPreloadData])
+
+  useEffect(() => {
+    if (data) {
+      workflowStore.getState().setDraftUpdatedAt(data.updated_at)
+      workflowStore.getState().setToolPublished(data.tool_published)
+    }
+  }, [data, workflowStore])
+
+  return {
+    data,
+    isLoading: isLoading || isFileUploadConfigLoading,
+    fileUploadConfigResponse,
+  }
+}
+```
+
+::: tip
+**1. Dify 如何解决多人协同编辑问题？**
+
+   Dify 工作流是允许多人协同编辑的，多人协同编辑要解决的核心问题是：当多人同一时段基于同一版本修改内容时，如何保证版本的一致性？
+   - **Dify 1.3 版本的做法：** [乐观锁机制](https://javaguide.cn/java/concurrent/optimistic-lock-and-pessimistic-lock.html#%E7%89%88%E6%9C%AC%E5%8F%B7%E6%9C%BA%E5%88%B6) LWW（Last Writers Wins），利用 draft hash 值告知后端 “我基于这个版本修改”，具体场景描述如下：
+
+  | 时间线 | 用户A | 用户B | 服务端草稿 | 服务端hash |
+  |-------|------|------|----------|-----------|
+  | T1 | 加载草稿 (hash: `abc123`) | 加载草稿 (hash: `abc123`) | v1版本 | `abc123` |
+  | T2 | 修改节点1 (本地) | 修改节点2 (本地) | v1版本 | `abc123` |
+  | T3 | **保存成功** ✅<br>携带 hash: `abc123` → 后端验证通过 | - | **v2版本**(A的修改) | **`xyz789`** |
+  | T4 | 本地更新 hash: `xyz789` | **保存失败** ❌<br>携带 hash: `abc123` → 后端检测不匹配 | v2版本 | `xyz789` |
+  | T5 | - | **触发刷新** 🔄<br>`handleRefreshWorkflowDraft()`<br>→ 重新拉取v2版本(A的修改)<br>→ 本地更新 hash: `xyz789` | v2版本 | `xyz789` |
+  | T6 | - | **B的本地编辑内容已丢失** ⚠️<br>画布显示v2(A的修改) | v2版本 | `xyz789` |
+
+  乐观锁机制能保证多人协同编辑版本一致性的问题，但同步最新版本时会覆盖其他人基于旧版本的修改，导致他人草稿态丢失。
+
+  - **Dify 后续优化：TODO，进一步了解 Dify 协同编辑解决方案** 进一步了解通用协同编辑解决方案，CRDT（无冲突复制数据类型）、OT（操作转换）...算法（`Prompt：帮我解释一下当前dify内仓库代码多人协同编辑是怎做的？`）
+
+  ```mermaid
+  graph TB
+    subgraph "前端架构"
+        RF["ReactFlow 画布"]
+        CM["CollaborationManager<br/>(CRDT: LoroDoc)"]
+        WS["WebSocket Manager"]
+        Hook["useCollaboration Hook"]
+        Sync["use-nodes-sync-draft"]
+    end
+
+    subgraph "后端架构"
+        SIO["Socket.IO Server"]
+        CS["WorkflowCollaborationService"]
+        Redis["Redis Session Store"]
+        DB["PostgreSQL<br/>(App/Workflow)"]
+    end
+
+    subgraph "CRDT 核心机制"
+        LD["LoroDoc<br/>(CRDT Document)"]
+        LM["LoroMap<br/>(nodes/edges)"]
+        UM["UndoManager<br/>(协作 Undo/Redo)"]
+    end
+
+    subgraph "Leader 选举"
+        LE["Leader Election<br/>(Redis TTL + SETNX)"]
+        BC["Broadcast Status"]
+    end
+
+    %% 数据流向
+    RF -->|"setNodes/setEdges"| CM
+    CM -->|"syncNodes/syncEdges"| LD
+    LD --> LM
+    CM -->|"emit graph_event"| WS
+    WS -->|"WebSocket"| SIO
+    SIO -->|"broadcast graph_update"| CS
+    
+    %% Leader 流程
+    CS -->|"get_or_set_leader"| LE
+    LE -->|"Redis SETNX"| Redis
+    CS -->|"emit status {isLeader}"| BC
+    BC -->|"WebSocket"| WS
+    WS -->|"onLeaderChange"| CM
+    
+    %% Follower 同步请求
+    CM -->|"emitSyncRequest<br/>(Follower)"| WS
+    WS --> SIO
+    SIO -->|"route to Leader only"| CS
+    CS -->|"emit to Leader sid"| BC
+    
+    %% 初始化同步
+    CM -->|"seedCrdtGraphFromReactFlowIfNeeded<br/>(Leader)"| LD
+    CM -->|"requestInitialSyncIfNeeded<br/>(Follower)"| WS
+    
+    %% CRDT 订阅
+    LM -->|"subscribe('import')"| CM
+    CM -->|"requestAnimationFrame"| RF
+    
+    %% Undo/Redo
+    UM -->|"track operations"| LD
+    CM -->|"undo()/redo()"| UM
+    
+    %% 草稿同步（降级路径）
+    Sync -->|"hash mismatch"| DB
+    DB -->|"WorkflowHashNotEqualError"| Sync
+    Sync -->|"handleRefresh<br/>(覆盖本地)"| RF
+    
+    %% 权限校验
+    CS -->|"authorize_and_join_workflow_room"| DB
+
+    style CM fill:#e1f5ff
+    style LD fill:#fff4e1
+    style LE fill:#ffe1f5
+    style CS fill:#e1ffe8
+      
+  ```
+
+
+ 
+:::
+
+
+
+
 
 ### 2.3 执行层
 

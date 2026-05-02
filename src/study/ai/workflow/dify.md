@@ -549,9 +549,10 @@ const WorkflowAppWithAdditionalContext = () => {
   const {
     data,
     isLoading,
-  } = useWorkflowInit() // ➡️ 核心函数
+  } = useWorkflowInit() // ➡️ 1. 核心函数：从后端获取 draft 数据
   const { data: fileUploadConfigResponse } = useSWR({ url: '/files/upload' }, fetchFileUploadConfig)
 
+  // 2. 前端处理 nodes、edges 数据
   const nodesData = useMemo(() => {
     if (data)
       return initialNodes(data.graph.nodes, data.graph.edges)
@@ -573,13 +574,14 @@ const WorkflowAppWithAdditionalContext = () => {
     )
   }
 
-  // 初始化一些特征变量
+  // 3. 初始化一些特征变量
   const features = data.features || {}
   const initialFeatures: FeaturesData = {
     ...
   }
 
   return (
+    // 4. 注入画布中绘制
     <WorkflowWithDefaultContext
       edges={edgesData}
       nodes={nodesData}
@@ -611,7 +613,7 @@ export default WorkflowAppWrapper
 
 **1. 初始化数据**
 
-  第一阶段从后端获取数据，前端将数据存储在 Store 中准备渲染。查看核心 hook `useWorkflowInit`，前端通过 appId 从后端获取初始的 draft 数据（graph + 配置信息），注意后端会返回一个 draft 的 hash 摘要，该摘要唯一用于前端上报 draft 时告诉后端"我基于这个版本修改"，用于解决多人协同编辑问题。
+  **第一步：从后端获取数据**，前端将数据存储在 Store 中准备渲染。查看核心 hook `useWorkflowInit`，前端通过 appId 从后端获取初始的 draft 数据（graph + 配置信息），注意后端会返回一个 draft 的 hash 摘要，该摘要唯一用于前端上报 draft 时告诉后端"我基于这个版本修改"，用于解决多人协同编辑问题。
 
 ```tsx 
 // app/components/workflow-app/hooks/use-workflow-init.ts
@@ -809,11 +811,131 @@ export const useWorkflowInit = () => {
     style CS fill:#e1ffe8
       
   ```
-
-
- 
 :::
 
+**第二步：前端处理 nodes，edges**，查看核心 util `initialNodes`、`initialEdges`，为了使用 ReactFlow 内置API，节点和边的数据结构设计需参考 [Node (ReactFlow)](https://reactflow.dev/api-reference/types/node)、[Edge (ReactFlow)](https://reactflow.dev/api-reference/types/edge)
+
+```ts 
+import {
+  getConnectedEdges,
+} from 'reactflow'
+...
+
+const WHITE = 'WHITE'
+...
+
+
+const isCyclicUtil = (nodeId: string, color: Record<string, string>, adjList: Record<string, string[]>, stack: string[]) => {
+  ...
+}
+// 工具函数：获取成环边
+const getCycleEdges = (nodes: Node[], edges: Edge[]) => {
+  ...
+}
+// 工具函数：特殊处理 iteration、loop 节点数据
+export const preprocessNodesAndEdges = (nodes: Node[], edges: Edge[]) => {
+  const hasIterationNode = nodes.some(node => node.data.type === BlockEnum.Iteration)
+  const hasLoopNode = nodes.some(node => node.data.type === BlockEnum.Loop)
+
+  if (!hasIterationNode && !hasLoopNode) {
+    return {
+      nodes,
+      edges,
+    }
+  }
+  // 兼容 iteration、loop 节点的特殊逻辑
+  ...
+  return {
+    nodes: [...nodes, ...newIterationStartNodes, ...newLoopStartNodes],
+    edges: [...edges, ...newEdges],
+  }
+}
+
+//❗️core：初始化 nodes
+export const initialNodes = (originNodes: Node[], originEdges: Edge[]) => {
+  const { nodes, edges } = preprocessNodesAndEdges(cloneDeep(originNodes), cloneDeep(originEdges))
+  const firstNode = nodes[0]
+
+  // 1. 初始化开始节点位置
+  if (!firstNode?.position) {
+    nodes.forEach((node, index) => {
+      node.position = {
+        x: START_INITIAL_POSITION.x + index * NODE_WIDTH_X_OFFSET,
+        y: START_INITIAL_POSITION.y,
+      }
+    })
+  }
+
+  // 2. 初始化每个节点的特殊属性值
+  return nodes.map((node) => {
+    if (!node.type)
+      node.type = CUSTOM_NODE
+  
+    const connectedEdges = getConnectedEdges([node], edges)
+    node.data._connectedSourceHandleIds = connectedEdges.filter(edge => edge.source === node.id).map(edge => edge.sourceHandle || 'source')
+    node.data._connectedTargetHandleIds = connectedEdges.filter(edge => edge.target === node.id).map(edge => edge.targetHandle || 'target')
+
+    if (node.data.type === BlockEnum.IfElse) {
+      ...
+    }
+
+    if (node.data.type === BlockEnum.QuestionClassifier) {
+      ...
+    }
+
+    if (node.data.type === BlockEnum.Iteration) {
+      ...
+    }
+
+    ...
+  
+    return node
+  })
+}
+
+//❗️core：初始化 edges
+export const initialEdges = (originEdges: Edge[], originNodes: Node[]) => {
+  const { nodes, edges } = preprocessNodesAndEdges(cloneDeep(originNodes), cloneDeep(originEdges))
+
+  let selectedNode: Node | null = null
+  const nodesMap = nodes.reduce((acc, node) => {
+    acc[node.id] = node
+
+    if (node.data?.selected)
+      selectedNode = node
+
+    return acc
+  }, {} as Record<string, Node>)
+
+  // 1. 通过 DFS 检测环路，过滤掉所有形成环路的边，保证工作流是有向无环图（DAG）
+  const cycleEdges = getCycleEdges(nodes, edges)
+  return edges.filter((edge) => {
+    return !cycleEdges.find(cycEdge => cycEdge.source === edge.source && cycEdge.target === edge.target)
+  }).map((edge) => {
+    edge.type = 'custom'
+
+    // 2. 补全缺失属性，对边的属性值做兜底
+    if (!edge.sourceHandle)
+      edge.sourceHandle = 'source'
+
+    if (!edge.targetHandle)
+      edge.targetHandle = 'target'
+
+    ...
+
+    // 3. 标记选中边，并高亮显示
+    if (selectedNode) {
+      edge.data = {
+        ...edge.data,
+        _connectedNodeIsSelected: edge.source === selectedNode.id || edge.target === selectedNode.id,
+      } as any
+    }
+
+    return edge
+  })
+}
+
+```
 
 
 

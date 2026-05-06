@@ -939,7 +939,7 @@ export const initialEdges = (originEdges: Edge[], originNodes: Node[]) => {
 
 **2. ReactFlow 画布初始化，渲染、节点、边**
 
-**第三步：采用 ReactFLow 绘制工作流：** 查看核心组件 `WorkflowWithDefaultContext`，了解 [Overview (ReactFlow)](https://reactflow.dev/learn/concepts/terms-and-definitions) 绘制基本组件 Node、Edge、Handle（连接点）
+**第三步：采用 ReactFLow 绘制工作流，** 查看核心组件 `WorkflowWithDefaultContext`，了解 [Overview (ReactFlow)](https://reactflow.dev/learn/concepts/terms-and-definitions) 绘制基本组件 Node、Edge、Handle（连接点）
 
 
 ``` tsx
@@ -1395,6 +1395,255 @@ export default memo(WorkflowWithDefaultContext)
 - [2] [Custom Edges (ReactFlow)](https://reactflow.dev/learn/customization/custom-edges)
 
 **3. 用户交互逻辑**
+
+**第四步：通过自定义 ReactFlow Hook 实现用户交互逻辑，** 包括拖拽、增、删节点 & 边等等。
+参考 [Adding Interactivity (ReactFlow)](https://reactflow.dev/learn/concepts/adding-interactivity) 官方实现，实际项目中实现方式复杂许多。
+
+`Node 交互逻辑`
+
+
+`Edge 交互逻辑`
+
+- 新增边
+```tsx
+// app/components/workflow/hooks/use-nodes-interactions.ts
+import type { MouseEvent } from 'react'
+...
+
+export const useNodesInteractions = () => {
+
+  // connect start，记录边起点信息
+  const handleNodeConnectStart = useCallback<OnConnectStart>(
+      (_, { nodeId, handleType, handleId }) => {
+        if (getNodesReadOnly())
+          return
+
+        if (nodeId && handleType) {
+          const { setConnectingNodePayload } = workflowStore.getState()
+          const { nodes } = collaborativeWorkflow.getState()
+          const node = nodes.find(n => n.id === nodeId)!
+
+          // 1. 边起点合法性校验
+          ...
+
+          // 2. 记录边起点信息
+          setConnectingNodePayload({
+            nodeId,
+            nodeType: node.data.type,
+            handleType,
+            handleId,
+          })
+        }
+      },
+      [collaborativeWorkflow, workflowStore, getNodesReadOnly],
+  )
+
+  // connect process, 创建实际边
+  const handleNodeConnect = useCallback<OnConnect>(
+    ({ source, sourceHandle, target, targetHandle }) => {
+
+      // 1. 边合法性校验，注意 1.3 版本有一个 checkNestedParallelLimit 多校验边的合法性，后续版本移除了这个逻辑
+      ...
+
+      // 2. 生成边元数据 
+      const parendNode = nodes.find(node => node.id === targetNode?.parentId)
+      const isInIteration
+        = parendNode && parendNode.data.type === BlockEnum.Iteration
+      const isInLoop = !!parendNode && parendNode.data.type === BlockEnum.Loop
+
+      const newEdge = {
+        id: `${source}-${sourceHandle}-${target}-${targetHandle}`,
+        type: CUSTOM_EDGE,
+        source: source!,
+        target: target!,
+        sourceHandle,
+        targetHandle,
+        data: {
+          sourceType: nodes.find(node => node.id === source)!.data.type,
+          targetType: nodes.find(node => node.id === target)!.data.type,
+          isInIteration,
+          iteration_id: isInIteration ? targetNode?.parentId : undefined,
+          isInLoop,
+          loop_id: isInLoop ? targetNode?.parentId : undefined,
+        },
+        zIndex: targetNode?.parentId
+          ? isInIteration
+            ? ITERATION_CHILDREN_Z_INDEX
+            : LOOP_CHILDREN_Z_INDEX
+          : 0,
+      }
+      const nodesConnectedSourceOrTargetHandleIdsMap
+        = getNodesConnectedSourceOrTargetHandleIdsMap(
+          [{ type: 'add', edge: newEdge }],
+          nodes,
+        )
+      const newNodes = produce(nodes, (draft: Node[]) => {
+        draft.forEach((node) => {
+          if (nodesConnectedSourceOrTargetHandleIdsMap[node.id]) {
+            node.data = {
+              ...node.data,
+              ...nodesConnectedSourceOrTargetHandleIdsMap[node.id],
+            }
+          }
+        })
+      })
+
+      // 3. 更新数据至 Store 和 后端
+      const newEdges = produce(edges, (draft) => {
+        draft.push(newEdge)
+      })
+
+      setNodes(newNodes)
+      setEdges(newEdges)
+
+      handleSyncWorkflowDraft()
+      saveStateToHistory(WorkflowHistoryEvent.NodeConnect, {
+        nodeId: targetNode?.id,
+      })
+    },
+    [
+      getNodesReadOnly,
+      collaborativeWorkflow,
+      workflowStore,
+      handleSyncWorkflowDraft,
+      saveStateToHistory,
+    ],
+  )
+
+  // connect end，兜底确保边的合法性
+  const handleNodeConnectEnd = useCallback<OnConnectEnd>(
+      (e: any) => {
+        if (getNodesReadOnly())
+          return
+
+        const {
+          connectingNodePayload,
+          setConnectingNodePayload,
+          enteringNodePayload,
+          setEnteringNodePayload,
+        } = workflowStore.getState()
+        if (connectingNodePayload && enteringNodePayload) {
+          const { setShowAssignVariablePopup, hoveringAssignVariableGroupId }
+            = workflowStore.getState()
+          const { screenToFlowPosition } = reactflow
+          const { nodes, setNodes } = collaborativeWorkflow.getState()
+          const fromHandleType = connectingNodePayload.handleType
+          const fromHandleId = connectingNodePayload.handleId
+          const fromNode = nodes.find(
+            n => n.id === connectingNodePayload.nodeId,
+          )!
+          const toNode = nodes.find(n => n.id === enteringNodePayload.nodeId)!
+          const toParentNode = nodes.find(n => n.id === toNode.parentId)
+
+          // 1. 校验生成边合法性
+          if (fromNode.parentId !== toNode.parentId)
+            return
+
+          const { x, y } = screenToFlowPosition({ x: e.x, y: e.y })
+
+          // 2. 变量赋值、聚合节点特殊处理
+          if (
+            fromHandleType === 'source'
+            && (toNode.data.type === BlockEnum.VariableAssigner
+              || toNode.data.type === BlockEnum.VariableAggregator)
+          ) {
+            ...
+          }
+        }
+
+        // 3. 清空边连接数据 
+        setConnectingNodePayload(undefined)
+        setEnteringNodePayload(undefined)
+      },
+      [collaborativeWorkflow, handleNodeConnect, getNodesReadOnly, workflowStore, reactflow],
+  )
+
+  return {
+    handleNodeConnect,
+    handleNodeConnectStart,
+    handleNodeConnectEnd,
+  }
+}
+```
+
+- 拖拽边
+ 
+```tsx
+// app/components/workflow/hooks/use-edges-interactions.ts
+import type { EdgeMouseHandler } from 'reactflow'
+...
+
+export const useEdgesInteractions = () => {
+  const store = useStoreApi()
+  const { handleSyncWorkflowDraft } = useNodesSyncDraft()
+
+  // hover 边：只更新边的 hover 状态
+  const handleEdgeEnter = useCallback<EdgeMouseHandler>((_, edge) => {
+    if (getNodesReadOnly())
+      return
+
+    const { edges, setEdges } = store.getState()
+    setEdges(updateEdgeHoverState(edges, edge.id, true))
+  }, [getNodesReadOnly, store])
+  const handleEdgeLeave = useCallback<EdgeMouseHandler>((_, edge) => {
+    if (getNodesReadOnly())
+      return
+
+    const { edges, setEdges } = store.getState()
+    setEdges(updateEdgeHoverState(edges, edge.id, false))
+  }, [getNodesReadOnly, store])
+
+  // 拖拽边：只处理边的select状态，不处理添加、删除等操作与官方实现不同
+  const handleEdgesChange = useCallback<OnEdgesChange>((changes) => {
+    if (getNodesReadOnly())
+      return
+
+    const {
+      edges,
+      setEdges,
+    } = collaborativeWorkflow.getState()
+    setEdges(updateEdgeSelectionState(edges, changes))
+  }, [collaborativeWorkflow, getNodesReadOnly])
+
+  return {
+    handleEdgeEnter,
+    handleEdgeLeave,
+    handleEdgesChange,
+  }
+}
+```
+
+```tsx
+// app/components/workflow/hooks/use-edges-interactions.helpers.ts
+import type { Edge, EdgeChange } from 'reactflow'
+...
+
+// 只更新边的hover状态
+export const updateEdgeHoverState = (
+  edges: Edge[],
+  edgeId: string,
+  hovering: boolean,
+) => produce(edges, (draft) => {
+  const currentEdge = draft.find(edge => edge.id === edgeId)
+  if (currentEdge)
+    currentEdge.data._hovering = hovering
+})
+
+// 只更新边的选中状态
+export const updateEdgeSelectionState = (
+  edges: Edge[],
+  changes: EdgeChange[],
+) => produce(edges, (draft) => {
+  changes.forEach((change) => {
+    if (change.type === 'select') {
+      const currentEdge = draft.find(edge => edge.id === change.id)
+      if (currentEdge)
+        currentEdge.selected = change.selected
+    }
+  })
+})
+
+```
 
 ### 2.3 执行层
 

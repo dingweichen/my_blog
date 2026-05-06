@@ -989,13 +989,15 @@ export const Workflow: FC<WorkflowProps> = memo(({
   const bottomPanelHeight = useStore(s => s.bottomPanelHeight)
   const setWorkflowCanvasWidth = useStore(s => s.setWorkflowCanvasWidth)
   const setWorkflowCanvasHeight = useStore(s => s.setWorkflowCanvasHeight)
-  const controlHeight = useMemo(() => {
-    if (!workflowCanvasHeight)
-      return '100%'
-    return workflowCanvasHeight - bottomPanelHeight
-  }, [workflowCanvasHeight, bottomPanelHeight])
-
-  // update workflow Canvas width and height
+  const {
+    setShowConfirm,
+    setControlPromptEditorRerenderKey,
+    setSyncWorkflowDraftHash,
+    setNodes: setNodesInStore,
+  } = workflowStore.getState()
+  
+  
+  // 1. 画布容器实现响应式布局
   useEffect(() => {
     if (workflowContainerRef.current) {
       const resizeContainerObserver = new ResizeObserver((entries) => {
@@ -1012,12 +1014,7 @@ export const Workflow: FC<WorkflowProps> = memo(({
     }
   }, [setWorkflowCanvasHeight, setWorkflowCanvasWidth])
 
-  const {
-    setShowConfirm,
-    setControlPromptEditorRerenderKey,
-    setSyncWorkflowDraftHash,
-    setNodes: setNodesInStore,
-  } = workflowStore.getState()
+  // 2. 同步 ReactFlow 节点数据至 Store（仅当节点 data 变化时才更新全局 Store，避免节点位置移动导致不必要的 Store 更新）
   const currentNodes = useNodes()
   const setNodesOnlyChangeWithData = useCallback((nodes: Node[]) => {
     const nodesData = nodes.map(node => ({
@@ -1034,6 +1031,9 @@ export const Workflow: FC<WorkflowProps> = memo(({
   useEffect(() => {
     setNodesOnlyChangeWithData(currentNodes as Node[])
   }, [currentNodes, setNodesOnlyChangeWithData])
+
+
+  // 3. 多人协作同步，监听 CRDT 图数据导入（来自其他用户的改动），同步渲染至 ReactFlow 画布
   useEffect(() => {
     return collaborationManager.onGraphImport(({ nodes: importedNodes, edges: importedEdges }) => {
       if (!isEqual(nodes, importedNodes)) {
@@ -1046,12 +1046,13 @@ export const Workflow: FC<WorkflowProps> = memo(({
       }
     })
   }, [edges, nodes, setEdges, setNodes, store])
-
   useEffect(() => {
     return collaborationManager.onHistoryAction((_) => {
       toast.info(t('collaboration.historyAction.generic', { ns: 'workflow' }))
     })
   }, [t])
+
+  // 4. 草稿同步与只读控制
   const {
     handleSyncWorkflowDraft,
     syncWorkflowDraftWhenPageClose,
@@ -1059,76 +1060,7 @@ export const Workflow: FC<WorkflowProps> = memo(({
   const { workflowReadOnly } = useWorkflowReadOnly()
   const { nodesReadOnly } = useNodesReadOnly()
   const { eventEmitter } = useEventEmitterContextContext()
-  const {
-    comments,
-    pendingComment,
-    activeComment,
-    activeCommentLoading,
-    replySubmitting,
-    replyUpdating,
-    handleCommentSubmit,
-    handleCommentCancel,
-    handleCommentIconClick,
-    handleActiveCommentClose,
-    handleCommentResolve,
-    handleCommentDelete,
-    handleCommentUpdate,
-    handleCommentReply,
-    handleCommentReplyUpdate,
-    handleCommentReplyDelete,
-    handleCommentPositionUpdate,
-  } = useWorkflowComment()
-  const showUserComments = useStore(s => s.showUserComments)
-  const showUserCursors = useStore(s => s.showUserCursors)
-  const showResolvedComments = useStore(s => s.showResolvedComments)
-  const isCommentPreviewHovering = useStore(s => s.isCommentPreviewHovering)
-  const isCommentPlacing = useStore(s => s.isCommentPlacing)
-  const setCommentPlacing = useStore(s => s.setCommentPlacing)
-  const setCommentQuickAdd = useStore(s => s.setCommentQuickAdd)
-  const setPendingCommentState = useStore(s => s.setPendingComment)
-  const isCommentInputActive = Boolean(pendingComment) || isCommentPlacing
-  const visibleComments = useMemo(() => {
-    if (showResolvedComments)
-      return comments
-    return comments.filter(comment => !comment.resolved)
-  }, [comments, showResolvedComments])
-  const handleVisibleCommentNavigate = useCallback((direction: 'prev' | 'next') => {
-    if (!activeComment)
-      return
-    const idx = visibleComments.findIndex(comment => comment.id === activeComment.id)
-    if (idx === -1)
-      return
-    const target = direction === 'prev' ? visibleComments[idx - 1] : visibleComments[idx + 1]
-    if (target)
-      handleCommentIconClick(target)
-  }, [activeComment, handleCommentIconClick, visibleComments])
-
-  eventEmitter?.useSubscription((v: any) => {
-    if (v.type === WORKFLOW_DATA_UPDATE) {
-      setNodes(v.payload.nodes)
-      store.getState().setNodes(v.payload.nodes)
-      setEdges(v.payload.edges)
-      workflowStore.setState({ edgeMenu: undefined })
-
-      if (v.payload.viewport)
-        reactflow.setViewport(v.payload.viewport)
-
-      if (v.payload.hash)
-        setSyncWorkflowDraftHash(v.payload.hash)
-
-      onWorkflowDataUpdate?.(v.payload)
-
-      setTimeout(() => setControlPromptEditorRerenderKey(Date.now()))
-    }
-  })
-
-  useEffect(() => {
-    setAutoFreeze(false)
-
-    return () => {
-      setAutoFreeze(true)
-    }
-  }, [])
+  const { handleRefreshWorkflowDraft } = useWorkflowRefreshDraft()
 
   useEffect(() => {
     return () => {
@@ -1136,17 +1068,6 @@ export const Workflow: FC<WorkflowProps> = memo(({
     }
   }, [handleSyncWorkflowDraft])
 
-  const handlePendingCommentPositionChange = useCallback((position: NonNullable<WorkflowSliceShape['pendingComment']>) => {
-    setPendingCommentState(position)
-  }, [setPendingCommentState])
-
-  const handleCommentPlacementCancel = useCallback(() => {
-    setPendingCommentState(null)
-    setCommentPlacing(false)
-    setCommentQuickAdd(false)
-  }, [setCommentPlacing, setCommentQuickAdd, setPendingCommentState])
-
-  const { handleRefreshWorkflowDraft } = useWorkflowRefreshDraft()
   const handleSyncWorkflowDraftWhenPageClose = useCallback(() => {
     if (document.visibilityState === 'hidden') {
       syncWorkflowDraftWhenPageClose()
@@ -1169,33 +1090,6 @@ export const Workflow: FC<WorkflowProps> = memo(({
     syncWorkflowDraftWhenPageClose()
   }, [syncWorkflowDraftWhenPageClose])
 
-  // Optimized comment deletion using showConfirm
-  const handleCommentDeleteClick = useCallback((commentId: string) => {
-    if (!showConfirm) {
-      setShowConfirm({
-        title: t('comments.confirm.deleteThreadTitle', { ns: 'workflow' }),
-        desc: t('comments.confirm.deleteThreadDesc', { ns: 'workflow' }),
-        onConfirm: async () => {
-          await handleCommentDelete(commentId)
-          setShowConfirm(undefined)
-        },
-      })
-    }
-  }, [showConfirm, setShowConfirm, handleCommentDelete, t])
-
-  const handleCommentReplyDeleteClick = useCallback((commentId: string, replyId: string) => {
-    if (!showConfirm) {
-      setShowConfirm({
-        title: t('comments.confirm.deleteReplyTitle', { ns: 'workflow' }),
-        desc: t('comments.confirm.deleteReplyDesc', { ns: 'workflow' }),
-        onConfirm: async () => {
-          await handleCommentReplyDelete(commentId, replyId)
-          setShowConfirm(undefined)
-        },
-      })
-    }
-  }, [showConfirm, setShowConfirm, handleCommentReplyDelete, t])
-
   useEffect(() => {
     document.addEventListener('visibilitychange', handleSyncWorkflowDraftWhenPageClose)
     window.addEventListener('beforeunload', handleBeforeUnload)
@@ -1206,6 +1100,33 @@ export const Workflow: FC<WorkflowProps> = memo(({
     }
   }, [handleSyncWorkflowDraftWhenPageClose, handleBeforeUnload])
 
+  useOnViewportChange({
+    onEnd: () => {
+      handleSyncWorkflowDraft()
+    },
+  })
+
+  // 5. 事件监听与防护
+  // 监听工作流数据更新事件
+  eventEmitter?.useSubscription((v: any) => {
+    if (v.type === WORKFLOW_DATA_UPDATE) {
+      setNodes(v.payload.nodes)
+      store.getState().setNodes(v.payload.nodes)
+      setEdges(v.payload.edges)
+      workflowStore.setState({ edgeMenu: undefined })
+
+      if (v.payload.viewport)
+        reactflow.setViewport(v.payload.viewport)
+
+      if (v.payload.hash)
+        setSyncWorkflowDraftHash(v.payload.hash)
+
+      onWorkflowDataUpdate?.(v.payload)
+
+      setTimeout(() => setControlPromptEditorRerenderKey(Date.now()))
+    }
+  })
+  // 监听键盘事件
   useEventListener('keydown', (e) => {
     if ((e.key === 'd' || e.key === 'D') && (e.ctrlKey || e.metaKey))
       e.preventDefault()
@@ -1216,6 +1137,7 @@ export const Workflow: FC<WorkflowProps> = memo(({
     if ((e.key === 's' || e.key === 'S') && (e.ctrlKey || e.metaKey))
       e.preventDefault()
   })
+  // 监听鼠标滚动事件
   useEventListener('mousemove', (e) => {
     const containerClientRect = workflowContainerRef.current?.getBoundingClientRect()
 
@@ -1234,7 +1156,7 @@ export const Workflow: FC<WorkflowProps> = memo(({
     }
   })
 
-  // Prevent browser zoom interactions from hijacking gestures meant for the workflow canvas
+  // 防止浏览器缩放劫持画布手势
   useEffect(() => {
     const preventBrowserZoom = (event: WheelEvent) => {
       if (!isCommentPreviewHovering && !isCommentInputActive)
@@ -1265,56 +1187,19 @@ export const Workflow: FC<WorkflowProps> = memo(({
     }
   }, [isCommentPreviewHovering, isCommentInputActive])
 
-  const {
-    handleNodeDragStart,
-    handleNodeDrag,
-    handleNodeDragStop,
-    handleNodeEnter,
-    handleNodeLeave,
-    handleNodeClick,
-    handleNodeConnect,
-    handleNodeConnectStart,
-    handleNodeConnectEnd,
-    handleNodeContextMenu,
-    handleHistoryBack,
-    handleHistoryForward,
-  } = useNodesInteractions()
-  const {
-    handleEdgeEnter,
-    handleEdgeLeave,
-    handleEdgesChange,
-    handleEdgeContextMenu,
-  } = useEdgesInteractions()
-  const {
-    handleSelectionStart,
-    handleSelectionChange,
-    handleSelectionDrag,
-    handleSelectionContextMenu,
-  } = useSelectionInteractions()
-  const {
-    handlePaneContextMenu,
-  } = usePanelInteractions()
-  const {
-    isValidConnection,
-  } = useWorkflow()
-
-  useOnViewportChange({
-    onEnd: () => {
-      handleSyncWorkflowDraft()
-    },
-  })
-
+  // 6. 注册辅助功能
+  // 快捷键绑定（Cmd+Z/Y 撤销重做、Delete 删除等）
   useShortcuts()
-  // Initialize workflow node search functionality
+  // 节点搜索功能（Cmd+K）
   useWorkflowSearch()
-
+  // Leader 恢复历史版本监听
   useLeaderRestoreListener()
-
-  // Set up scroll to node event listener using the utility function
+  // 滚动到指定节点的监听器
   useEffect(() => {
     return setupScrollToNodeListener(nodes, reactflow)
   }, [nodes, reactflow])
 
+  // 7. Tool 节点数据获取
   const { schemaTypeDefinitions } = useMatchSchemaType()
   const { fetchInspectVars } = useSetWorkflowVarsWithValue()
   const { data: buildInTools } = useAllBuiltInTools()
@@ -1359,6 +1244,40 @@ export const Workflow: FC<WorkflowProps> = memo(({
       console.warn(message)
     }
   }
+
+  // ❗️8. 关键交互处理器 
+  const {
+    handleNodeDragStart,
+    handleNodeDrag,
+    handleNodeDragStop,
+    handleNodeEnter,
+    handleNodeLeave,
+    handleNodeClick,
+    handleNodeConnect,
+    handleNodeConnectStart,
+    handleNodeConnectEnd,
+    handleNodeContextMenu,
+    handleHistoryBack,
+    handleHistoryForward,
+  } = useNodesInteractions()
+  const {
+    handleEdgeEnter,
+    handleEdgeLeave,
+    handleEdgesChange,
+    handleEdgeContextMenu,
+  } = useEdgesInteractions()
+  const {
+    handleSelectionStart,
+    handleSelectionChange,
+    handleSelectionDrag,
+    handleSelectionContextMenu,
+  } = useSelectionInteractions()
+  const {
+    handlePaneContextMenu,
+  } = usePanelInteractions()
+  const {
+    isValidConnection,
+  } = useWorkflow()
 
   return (
     <div

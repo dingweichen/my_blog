@@ -1438,7 +1438,7 @@ export const useNodesInteractions = () => {
       [collaborativeWorkflow, workflowStore, getNodesReadOnly],
   )
 
-  // connect process, 创建实际边
+  // ❗️connect process, 创建实际边
   const handleNodeConnect = useCallback<OnConnect>(
     ({ source, sourceHandle, target, targetHandle }) => {
 
@@ -1593,7 +1593,7 @@ export const useEdgesInteractions = () => {
     setEdges(updateEdgeHoverState(edges, edge.id, false))
   }, [getNodesReadOnly, store])
 
-  // 拖拽边：只处理边的select状态，不处理添加、删除等操作与官方实现不同
+  // ❗️拖拽边：只处理边的select状态，不处理添加、删除等操作与官方实现不同
   const handleEdgesChange = useCallback<OnEdgesChange>((changes) => {
     if (getNodesReadOnly())
       return
@@ -1642,8 +1642,109 @@ export const updateEdgeSelectionState = (
     }
   })
 })
-
 ```
+
+- 删除边
+```tsx
+// app/components/workflow/hooks/use-edges-interactions.ts
+import type { EdgeMouseHandler } from 'reactflow'
+...
+
+export const useEdgesInteractions = () => {
+  const store = useStoreApi()
+  const { handleSyncWorkflowDraft } = useNodesSyncDraft()
+  
+  // 核心函数：删除边
+  const deleteEdgeById = useCallback((edgeId: string) => {
+    const {
+      nodes,
+      setNodes,
+      edges,
+      setEdges,
+    } = collaborativeWorkflow.getState()
+    const currentEdgeIndex = edges.findIndex(edge => edge.id === edgeId)
+
+    if (currentEdgeIndex < 0)
+      return
+    const currentEdge = edges[currentEdgeIndex]!
+
+    // 更新节点的连接元数据
+    const newNodes = applyConnectedHandleNodeData(nodes, [{ type: 'remove', edge: currentEdge }])
+    setNodes(newNodes)
+
+    // 删除边
+    const newEdges = produce(edges, (draft) => {
+      draft.splice(currentEdgeIndex, 1)
+    })
+    setEdges(newEdges)
+    if (clearEdgeMenuIfNeeded({ edgeMenu: workflowStore.getState().edgeMenu, edgeIds: [currentEdge!.id] }))
+      workflowStore.setState({ edgeMenu: undefined })
+    handleSyncWorkflowDraft()
+    saveStateToHistory(WorkflowHistoryEvent.EdgeDelete)
+  }, [collaborativeWorkflow, workflowStore, handleSyncWorkflowDraft, saveStateToHistory])
+  
+  const handleEdgeDeleteByDeleteBranch = useCallback((nodeId: string, branchId: string) => {
+    if (getNodesReadOnly())
+      return
+
+    const {
+      nodes,
+      setNodes,
+      edges,
+      setEdges,
+    } = collaborativeWorkflow.getState()
+    const edgeWillBeDeleted = edges.filter(edge => edge.source === nodeId && edge.sourceHandle === branchId)
+
+    if (!edgeWillBeDeleted.length)
+      return
+
+    const newNodes = applyConnectedHandleNodeData(
+      nodes,
+      edgeWillBeDeleted.map(edge => ({ type: 'remove' as const, edge })),
+    )
+    setNodes(newNodes)
+    const newEdges = produce(edges, (draft) => {
+      return draft.filter(edge => !edgeWillBeDeleted.find(e => e.id === edge.id))
+    })
+    setEdges(newEdges)
+    if (clearEdgeMenuIfNeeded({
+      edgeMenu: workflowStore.getState().edgeMenu,
+      edgeIds: edgeWillBeDeleted.map(edge => edge.id),
+    })) {
+      workflowStore.setState({ edgeMenu: undefined })
+    }
+    handleSyncWorkflowDraft()
+    saveStateToHistory(WorkflowHistoryEvent.EdgeDeleteByDeleteBranch)
+  }, [getNodesReadOnly, collaborativeWorkflow, workflowStore, handleSyncWorkflowDraft, saveStateToHistory])
+
+  const handleEdgeDelete = useCallback(() => {
+    if (getNodesReadOnly())
+      return
+    const { edges } = collaborativeWorkflow.getState()
+    const currentEdge = edges.find(edge => edge.selected)
+
+    if (!currentEdge)
+      return
+
+    deleteEdgeById(currentEdge.id)
+  }, [deleteEdgeById, getNodesReadOnly, collaborativeWorkflow])
+
+  const handleEdgeDeleteById = useCallback((edgeId: string) => {
+    if (getNodesReadOnly())
+      return
+
+    deleteEdgeById(edgeId)
+  }, [deleteEdgeById, getNodesReadOnly])
+
+  return {
+    deleteEdgeById
+    handleEdgeDelete,
+    handleEdgeDeleteById,
+    handleEdgeDeleteByDeleteBranch,
+  }
+}
+```
+
 
 ### 2.3 执行层
 

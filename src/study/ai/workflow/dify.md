@@ -549,9 +549,10 @@ const WorkflowAppWithAdditionalContext = () => {
   const {
     data,
     isLoading,
-  } = useWorkflowInit() // ➡️ 核心函数
+  } = useWorkflowInit() // ➡️ 1. 核心函数：从后端获取 draft 数据
   const { data: fileUploadConfigResponse } = useSWR({ url: '/files/upload' }, fetchFileUploadConfig)
 
+  // 2. 前端处理 nodes、edges 数据
   const nodesData = useMemo(() => {
     if (data)
       return initialNodes(data.graph.nodes, data.graph.edges)
@@ -573,13 +574,14 @@ const WorkflowAppWithAdditionalContext = () => {
     )
   }
 
-  // 初始化一些特征变量
+  // 3. 初始化一些特征变量
   const features = data.features || {}
   const initialFeatures: FeaturesData = {
     ...
   }
 
   return (
+    // 4. 注入画布中绘制
     <WorkflowWithDefaultContext
       edges={edgesData}
       nodes={nodesData}
@@ -611,7 +613,7 @@ export default WorkflowAppWrapper
 
 **1. 初始化数据**
 
-  第一阶段从后端获取数据，前端将数据存储在 Store 中准备渲染。查看核心 hook `useWorkflowInit`，前端通过 appId 从后端获取初始的 draft 数据（graph + 配置信息），注意后端会返回一个 draft 的 hash 摘要，该摘要唯一用于前端上报 draft 时告诉后端"我基于这个版本修改"，用于解决多人协同编辑问题。
+  **第一步：从后端获取数据**，前端将数据存储在 Store 中准备渲染。查看核心 hook `useWorkflowInit`，前端通过 appId 从后端获取初始的 draft 数据（graph + 配置信息），注意后端会返回一个 draft 的 hash 摘要，该摘要唯一用于前端上报 draft 时告诉后端"我基于这个版本修改"，用于解决多人协同编辑问题。
 
 ```tsx 
 // app/components/workflow-app/hooks/use-workflow-init.ts
@@ -809,13 +811,939 @@ export const useWorkflowInit = () => {
     style CS fill:#e1ffe8
       
   ```
-
-
- 
 :::
 
+**第二步：前端处理 nodes，edges**，查看核心 util `initialNodes`、`initialEdges`，为了使用 ReactFlow 内置API，节点和边的数据结构设计需参考 [Node (ReactFlow)](https://reactflow.dev/api-reference/types/node)、[Edge (ReactFlow)](https://reactflow.dev/api-reference/types/edge)
+```ts
+// app/components/workflow/utils/workflow-init.ts
+import {
+  getConnectedEdges,
+} from 'reactflow'
+...
+
+const WHITE = 'WHITE'
+...
 
 
+const isCyclicUtil = (nodeId: string, color: Record<string, string>, adjList: Record<string, string[]>, stack: string[]) => {
+  ...
+}
+// 工具函数：获取成环边
+const getCycleEdges = (nodes: Node[], edges: Edge[]) => {
+  ...
+}
+// 工具函数：特殊处理 iteration、loop 节点数据
+export const preprocessNodesAndEdges = (nodes: Node[], edges: Edge[]) => {
+  const hasIterationNode = nodes.some(node => node.data.type === BlockEnum.Iteration)
+  const hasLoopNode = nodes.some(node => node.data.type === BlockEnum.Loop)
+
+  if (!hasIterationNode && !hasLoopNode) {
+    return {
+      nodes,
+      edges,
+    }
+  }
+  // 兼容 iteration、loop 节点的特殊逻辑
+  ...
+  return {
+    nodes: [...nodes, ...newIterationStartNodes, ...newLoopStartNodes],
+    edges: [...edges, ...newEdges],
+  }
+}
+
+//❗️core：初始化 nodes
+export const initialNodes = (originNodes: Node[], originEdges: Edge[]) => {
+  const { nodes, edges } = preprocessNodesAndEdges(cloneDeep(originNodes), cloneDeep(originEdges))
+  const firstNode = nodes[0]
+
+  // 1. 初始化开始节点位置
+  if (!firstNode?.position) {
+    nodes.forEach((node, index) => {
+      node.position = {
+        x: START_INITIAL_POSITION.x + index * NODE_WIDTH_X_OFFSET,
+        y: START_INITIAL_POSITION.y,
+      }
+    })
+  }
+
+  // 2. 初始化每个节点的特殊属性值
+  return nodes.map((node) => {
+    if (!node.type)
+      node.type = CUSTOM_NODE
+  
+    const connectedEdges = getConnectedEdges([node], edges)
+    node.data._connectedSourceHandleIds = connectedEdges.filter(edge => edge.source === node.id).map(edge => edge.sourceHandle || 'source')
+    node.data._connectedTargetHandleIds = connectedEdges.filter(edge => edge.target === node.id).map(edge => edge.targetHandle || 'target')
+
+    if (node.data.type === BlockEnum.IfElse) {
+      ...
+    }
+
+    if (node.data.type === BlockEnum.QuestionClassifier) {
+      ...
+    }
+
+    if (node.data.type === BlockEnum.Iteration) {
+      ...
+    }
+
+    ...
+  
+    return node
+  })
+}
+
+//❗️core：初始化 edges
+export const initialEdges = (originEdges: Edge[], originNodes: Node[]) => {
+  const { nodes, edges } = preprocessNodesAndEdges(cloneDeep(originNodes), cloneDeep(originEdges))
+
+  let selectedNode: Node | null = null
+  const nodesMap = nodes.reduce((acc, node) => {
+    acc[node.id] = node
+
+    if (node.data?.selected)
+      selectedNode = node
+
+    return acc
+  }, {} as Record<string, Node>)
+
+  // 1. 通过 DFS 检测环路，过滤掉所有形成环路的边，保证工作流是有向无环图（DAG）
+  const cycleEdges = getCycleEdges(nodes, edges)
+  return edges.filter((edge) => {
+    return !cycleEdges.find(cycEdge => cycEdge.source === edge.source && cycEdge.target === edge.target)
+  }).map((edge) => {
+    edge.type = 'custom'
+
+    // 2. 补全缺失属性，对边的属性值做兜底
+    if (!edge.sourceHandle)
+      edge.sourceHandle = 'source'
+
+    if (!edge.targetHandle)
+      edge.targetHandle = 'target'
+
+    ...
+
+    // 3. 标记选中边，并高亮显示
+    if (selectedNode) {
+      edge.data = {
+        ...edge.data,
+        _connectedNodeIsSelected: edge.source === selectedNode.id || edge.target === selectedNode.id,
+      } as any
+    }
+
+    return edge
+  })
+}
+
+```
+
+**2. ReactFlow 画布初始化，渲染、节点、边**
+
+**第三步：采用 ReactFLow 绘制工作流，** 查看核心组件 `WorkflowWithDefaultContext`，了解 [Overview (ReactFlow)](https://reactflow.dev/learn/concepts/terms-and-definitions) 绘制基本组件 Node、Edge、Handle（连接点）
+
+
+``` tsx
+// app/components/workflow/index.tsx
+
+'use client'
+
+import type { FC } from 'react'
+...
+
+const nodeTypes = {
+  [CUSTOM_NODE]: CustomNode, // 基础节点，所有业务节点基类
+  [CUSTOM_NOTE_NODE]: CustomNoteNode, // comment 节点
+  [CUSTOM_SIMPLE_NODE]: CustomSimpleNode,
+  [CUSTOM_ITERATION_START_NODE]: CustomIterationStartNode, // iteration 开始节点
+  [CUSTOM_LOOP_START_NODE]: CustomLoopStartNode, // loop 开始节点
+  [CUSTOM_DATA_SOURCE_EMPTY_NODE]: CustomDataSourceEmptyNode,
+}
+const edgeTypes = {
+  [CUSTOM_EDGE]: CustomEdge,
+}
+
+
+// 绘制第三层（顶层）：ReactFlow 渲染画布，提供用户交互
+export const Workflow: FC<WorkflowProps> = memo(({
+  nodes: originalNodes,
+  edges: originalEdges,
+  viewport,
+  children,
+  onWorkflowDataUpdate,
+  cursors,
+  myUserId,
+  onlineUsers,
+}) => {
+  const { t } = useTranslation()
+  const workflowContainerRef = useRef<HTMLDivElement>(null)
+  const workflowStore = useWorkflowStore()
+  const reactflow = useReactFlow()
+  const store = useStoreApi()
+  const [isMouseOverCanvas, setIsMouseOverCanvas] = useState(false)
+  const [nodes, setNodes] = useNodesState(originalNodes)
+  const [edges, setEdges] = useEdgesState(originalEdges)
+  const controlMode = useStore(s => s.controlMode)
+  const nodeAnimation = useStore(s => s.nodeAnimation)
+  const showConfirm = useStore(s => s.showConfirm)
+  const workflowCanvasHeight = useStore(s => s.workflowCanvasHeight)
+  const bottomPanelHeight = useStore(s => s.bottomPanelHeight)
+  const setWorkflowCanvasWidth = useStore(s => s.setWorkflowCanvasWidth)
+  const setWorkflowCanvasHeight = useStore(s => s.setWorkflowCanvasHeight)
+  const {
+    setShowConfirm,
+    setControlPromptEditorRerenderKey,
+    setSyncWorkflowDraftHash,
+    setNodes: setNodesInStore,
+  } = workflowStore.getState()
+  
+  
+  // 1. 画布容器实现响应式布局
+  useEffect(() => {
+    if (workflowContainerRef.current) {
+      const resizeContainerObserver = new ResizeObserver((entries) => {
+        for (const entry of entries) {
+          const { inlineSize, blockSize } = entry.borderBoxSize[0]!
+          setWorkflowCanvasWidth(inlineSize)
+          setWorkflowCanvasHeight(blockSize)
+        }
+      })
+      resizeContainerObserver.observe(workflowContainerRef.current)
+      return () => {
+        resizeContainerObserver.disconnect()
+      }
+    }
+  }, [setWorkflowCanvasHeight, setWorkflowCanvasWidth])
+
+  // 2. 同步 ReactFlow 节点数据至 Store（仅当节点 data 变化时才更新全局 Store，避免节点位置移动导致不必要的 Store 更新）
+  const currentNodes = useNodes()
+  const setNodesOnlyChangeWithData = useCallback((nodes: Node[]) => {
+    const nodesData = nodes.map(node => ({
+      id: node.id,
+      data: node.data,
+    }))
+    const oldData = workflowStore.getState().nodes.map(node => ({
+      id: node.id,
+      data: node.data,
+    }))
+    if (!isEqual(oldData, nodesData))
+      setNodesInStore(nodes)
+  }, [setNodesInStore, workflowStore])
+  useEffect(() => {
+    setNodesOnlyChangeWithData(currentNodes as Node[])
+  }, [currentNodes, setNodesOnlyChangeWithData])
+
+
+  // 3. 多人协作同步，监听 CRDT 图数据导入（来自其他用户的改动），同步渲染至 ReactFlow 画布
+  useEffect(() => {
+    return collaborationManager.onGraphImport(({ nodes: importedNodes, edges: importedEdges }) => {
+      if (!isEqual(nodes, importedNodes)) {
+        setNodes(importedNodes)
+        store.getState().setNodes(importedNodes)
+      }
+      if (!isEqual(edges, importedEdges)) {
+        setEdges(importedEdges)
+        store.getState().setEdges(importedEdges)
+      }
+    })
+  }, [edges, nodes, setEdges, setNodes, store])
+  useEffect(() => {
+    return collaborationManager.onHistoryAction((_) => {
+      toast.info(t('collaboration.historyAction.generic', { ns: 'workflow' }))
+    })
+  }, [t])
+
+  // 4. 草稿同步与只读控制
+  const {
+    handleSyncWorkflowDraft,
+    syncWorkflowDraftWhenPageClose,
+  } = useNodesSyncDraft()
+  const { workflowReadOnly } = useWorkflowReadOnly()
+  const { nodesReadOnly } = useNodesReadOnly()
+  const { eventEmitter } = useEventEmitterContextContext()
+  const { handleRefreshWorkflowDraft } = useWorkflowRefreshDraft()
+
+  useEffect(() => {
+    return () => {
+      handleSyncWorkflowDraft(true, true)
+    }
+  }, [handleSyncWorkflowDraft])
+
+  const handleSyncWorkflowDraftWhenPageClose = useCallback(() => {
+    if (document.visibilityState === 'hidden') {
+      syncWorkflowDraftWhenPageClose()
+      return
+    }
+
+    if (document.visibilityState === 'visible') {
+      const { isListening, workflowRunningData } = workflowStore.getState()
+      const status = workflowRunningData?.result?.status
+      // Avoid resetting UI state when user comes back while a run is active or listening for triggers
+      if (isListening || status === WorkflowRunningStatus.Running)
+        return
+
+      setTimeout(() => handleRefreshWorkflowDraft(), 500)
+    }
+  }, [syncWorkflowDraftWhenPageClose, handleRefreshWorkflowDraft, workflowStore])
+
+  // Also add beforeunload handler as additional safety net for tab close
+  const handleBeforeUnload = useCallback(() => {
+    syncWorkflowDraftWhenPageClose()
+  }, [syncWorkflowDraftWhenPageClose])
+
+  useEffect(() => {
+    document.addEventListener('visibilitychange', handleSyncWorkflowDraftWhenPageClose)
+    window.addEventListener('beforeunload', handleBeforeUnload)
+
+    return () => {
+      document.removeEventListener('visibilitychange', handleSyncWorkflowDraftWhenPageClose)
+      window.removeEventListener('beforeunload', handleBeforeUnload)
+    }
+  }, [handleSyncWorkflowDraftWhenPageClose, handleBeforeUnload])
+
+  useOnViewportChange({
+    onEnd: () => {
+      handleSyncWorkflowDraft()
+    },
+  })
+
+  // 5. 事件监听与防护
+  // 监听工作流数据更新事件
+  eventEmitter?.useSubscription((v: any) => {
+    if (v.type === WORKFLOW_DATA_UPDATE) {
+      setNodes(v.payload.nodes)
+      store.getState().setNodes(v.payload.nodes)
+      setEdges(v.payload.edges)
+      workflowStore.setState({ edgeMenu: undefined })
+
+      if (v.payload.viewport)
+        reactflow.setViewport(v.payload.viewport)
+
+      if (v.payload.hash)
+        setSyncWorkflowDraftHash(v.payload.hash)
+
+      onWorkflowDataUpdate?.(v.payload)
+
+      setTimeout(() => setControlPromptEditorRerenderKey(Date.now()))
+    }
+  })
+  // 监听键盘事件
+  useEventListener('keydown', (e) => {
+    if ((e.key === 'd' || e.key === 'D') && (e.ctrlKey || e.metaKey))
+      e.preventDefault()
+    if ((e.key === 'z' || e.key === 'Z') && (e.ctrlKey || e.metaKey))
+      e.preventDefault()
+    if ((e.key === 'y' || e.key === 'Y') && (e.ctrlKey || e.metaKey))
+      e.preventDefault()
+    if ((e.key === 's' || e.key === 'S') && (e.ctrlKey || e.metaKey))
+      e.preventDefault()
+  })
+  // 监听鼠标滚动事件
+  useEventListener('mousemove', (e) => {
+    const containerClientRect = workflowContainerRef.current?.getBoundingClientRect()
+
+    if (containerClientRect) {
+      workflowStore.setState({
+        mousePosition: {
+          pageX: e.clientX,
+          pageY: e.clientY,
+          elementX: e.clientX - containerClientRect.left,
+          elementY: e.clientY - containerClientRect.top,
+        },
+      })
+      const target = e.target as HTMLElement
+      const onPane = !!target?.closest('.react-flow__pane')
+      setIsMouseOverCanvas(onPane)
+    }
+  })
+
+  // 防止浏览器缩放劫持画布手势
+  useEffect(() => {
+    const preventBrowserZoom = (event: WheelEvent) => {
+      if (!isCommentPreviewHovering && !isCommentInputActive)
+        return
+
+      if (event.ctrlKey || event.metaKey)
+        event.preventDefault()
+    }
+
+    const preventGestureZoom = (event: Event) => {
+      if (!isCommentPreviewHovering && !isCommentInputActive)
+        return
+
+      event.preventDefault()
+    }
+
+    window.addEventListener('wheel', preventBrowserZoom, { passive: false })
+    const gestureEvents: Array<'gesturestart' | 'gesturechange' | 'gestureend'> = ['gesturestart', 'gesturechange', 'gestureend']
+    gestureEvents.forEach((eventName) => {
+      window.addEventListener(eventName, preventGestureZoom, { passive: false })
+    })
+
+    return () => {
+      window.removeEventListener('wheel', preventBrowserZoom)
+      gestureEvents.forEach((eventName) => {
+        window.removeEventListener(eventName, preventGestureZoom)
+      })
+    }
+  }, [isCommentPreviewHovering, isCommentInputActive])
+
+  // 6. 注册辅助功能
+  // 快捷键绑定（Cmd+Z/Y 撤销重做、Delete 删除等）
+  useShortcuts()
+  // 节点搜索功能（Cmd+K）
+  useWorkflowSearch()
+  // Leader 恢复历史版本监听
+  useLeaderRestoreListener()
+  // 滚动到指定节点的监听器
+  useEffect(() => {
+    return setupScrollToNodeListener(nodes, reactflow)
+  }, [nodes, reactflow])
+
+  // 7. Tool 节点数据获取
+  const { schemaTypeDefinitions } = useMatchSchemaType()
+  const { fetchInspectVars } = useSetWorkflowVarsWithValue()
+  const { data: buildInTools } = useAllBuiltInTools()
+  const { data: customTools } = useAllCustomTools()
+  const { data: workflowTools } = useAllWorkflowTools()
+  const { data: mcpTools } = useAllMCPTools()
+  const dataSourceList = useStore(s => s.dataSourceList)
+  // buildInTools, customTools, workflowTools, mcpTools, dataSourceList
+  const configsMap = useHooksStore(s => s.configsMap)
+  const [isLoadedVars, setIsLoadedVars] = useState(false)
+  const [vars, setVars] = useState<VarInInspect[]>([])
+  useEffect(() => {
+    (async () => {
+      if (!configsMap?.flowType || !configsMap?.flowId)
+        return
+      const data = await fetchAllInspectVars(configsMap.flowType, configsMap.flowId)
+      setVars(data)
+      setIsLoadedVars(true)
+    })()
+  }, [configsMap?.flowType, configsMap?.flowId])
+  useEffect(() => {
+    if (schemaTypeDefinitions && isLoadedVars) {
+      fetchInspectVars({
+        passInVars: true,
+        vars,
+        passedInAllPluginInfoList: {
+          buildInTools: buildInTools || [],
+          customTools: customTools || [],
+          workflowTools: workflowTools || [],
+          mcpTools: mcpTools || [],
+          dataSourceList: dataSourceList ?? [],
+        },
+        passedInSchemaTypeDefinitions: schemaTypeDefinitions,
+      })
+    }
+  }, [schemaTypeDefinitions, fetchInspectVars, isLoadedVars, vars, customTools, buildInTools, workflowTools, mcpTools, dataSourceList])
+
+  if (IS_DEV) {
+    store.getState().onError = (code, message) => {
+      if (code === '002')
+        return
+      console.warn(message)
+    }
+  }
+
+  // ❗️8. 关键交互处理器 
+  const {
+    handleNodeDragStart,
+    handleNodeDrag,
+    handleNodeDragStop,
+    handleNodeEnter,
+    handleNodeLeave,
+    handleNodeClick,
+    handleNodeConnect,
+    handleNodeConnectStart,
+    handleNodeConnectEnd,
+    handleNodeContextMenu,
+    handleHistoryBack,
+    handleHistoryForward,
+  } = useNodesInteractions()
+  const {
+    handleEdgeEnter,
+    handleEdgeLeave,
+    handleEdgesChange,
+    handleEdgeContextMenu,
+  } = useEdgesInteractions()
+  const {
+    handleSelectionStart,
+    handleSelectionChange,
+    handleSelectionDrag,
+    handleSelectionContextMenu,
+  } = useSelectionInteractions()
+  const {
+    handlePaneContextMenu,
+  } = usePanelInteractions()
+  const {
+    isValidConnection,
+  } = useWorkflow()
+
+  return (
+    <div
+      id="workflow-container"
+      className={cn(...)}
+      ref={workflowContainerRef}
+    >
+      {/* 挂载一些全局组件实例 */}
+      <SyncingDataModal />
+      <CandidateNode />
+      <CommentManager />
+      ... 
+
+      {children}
+
+      {/* ❗️绘制画布 */}
+      <ReactFlow
+        nodeTypes={nodeTypes}  // 自定义节点，参考 [1] Custom Nodes
+        edgeTypes={edgeTypes} // 自定义边，参考 [2] Custom Edges
+        nodes={nodes} // 注入 nodes 数据
+        edges={edges} // 注入 edges 数据
+        className={...}
+        onNodeDragStart={handleNodeDragStart}
+        onNodeDrag={handleNodeDrag}
+        onNodeDragStop={handleNodeDragStop}
+        onNodeMouseEnter={handleNodeEnter}
+        onNodeMouseLeave={handleNodeLeave}
+        onNodeClick={handleNodeClick}
+        onNodeContextMenu={handleNodeContextMenu}
+        onConnect={handleNodeConnect} // ⚠️ connect处理：process，创建实际连接（边，1.3版本会有边的平行度、出入度、成环等校验），更新 draft 并同步给后端
+        onConnectStart={handleNodeConnectStart} // connect处理：start，记录连接起点信息
+        onConnectEnd={handleNodeConnectEnd} // connect处理：end，最后确保连接的合法性
+        onEdgeMouseEnter={handleEdgeEnter} // edge处理：hover，设置为true
+        onEdgeMouseLeave={handleEdgeLeave} // edge处理：hover，设置为false
+        onEdgesChange={handleEdgesChange} //  edge处理：select，只处理边的select状态，不处理添加、删除等操作与官方实现不同
+        onEdgeContextMenu={handleEdgeContextMenu}
+        onSelectionStart={handleSelectionStart}
+        onSelectionChange={handleSelectionChange}
+        onSelectionDrag={handleSelectionDrag}
+        onPaneContextMenu={handlePaneContextMenu}
+        onSelectionContextMenu={handleSelectionContextMenu}
+        connectionLineComponent={CustomConnectionLine}
+        // NOTE: For LOOP node, how to distinguish between ITERATION and LOOP here? Maybe both are the same?
+        // 下面是一堆属性配置，不涉及关键逻辑...
+        isValidConnection={isValidConnection}
+        connectionLineContainerStyle={{ zIndex: ITERATION_CHILDREN_Z_INDEX }}
+        defaultViewport={viewport}
+        ...
+      >
+        <Background
+          gap={[14, 14]}
+          size={2}
+          className="bg-workflow-canvas-workflow-bg"
+          color="var(--color-workflow-canvas-workflow-dot-color)"
+        />
+        {showUserCursors && cursors && (
+          <UserCursors
+            cursors={cursors}
+            myUserId={myUserId || null}
+            onlineUsers={onlineUsers || []}
+          />
+        )}
+      </ReactFlow>
+    </div>
+  )
+})
+
+
+// 绘制层第二层：提供业务 Hooks
+export const WorkflowWithInnerContext = memo(({
+  hooksStore,
+  cursors,
+  myUserId,
+  onlineUsers,
+  ...restProps
+}: WorkflowWithInnerContextProps) => {
+  return (
+    <HooksStoreContextProvider {...hooksStore}>
+      <Workflow
+        {...restProps}
+        cursors={cursors}
+        myUserId={myUserId}
+        onlineUsers={onlineUsers}
+      />
+    </HooksStoreContextProvider>
+  )
+})
+
+
+// 绘制层第一层（底层）：提供基础 Context
+const WorkflowWithDefaultContext = ({
+  nodes,
+  edges,
+  children,
+}: WorkflowWithDefaultContextProps) => {
+  return (
+    <ReactFlowProvider>
+      <WorkflowHistoryProvider
+        nodes={nodes}
+        edges={edges}
+      >
+        <DatasetsDetailProvider nodes={nodes}>
+          {children}
+        </DatasetsDetailProvider>
+      </WorkflowHistoryProvider>
+    </ReactFlowProvider>
+  )
+}
+
+export default memo(WorkflowWithDefaultContext)
+```
+
+**参考文档**：
+- [1] [Custom Nodes (ReactFlow)](https://reactflow.dev/learn/customization/custom-nodes)
+- [2] [Custom Edges (ReactFlow)](https://reactflow.dev/learn/customization/custom-edges)
+
+**3. 用户交互逻辑**
+
+**第四步：通过自定义 ReactFlow Hook 实现用户交互逻辑，** 包括拖拽、增、删节点 & 边等等。
+参考 [Adding Interactivity (ReactFlow)](https://reactflow.dev/learn/concepts/adding-interactivity) 官方实现，实际项目中实现方式复杂许多。
+
+`Node 交互逻辑`
+
+
+`Edge 交互逻辑`
+
+- 新增边
+```tsx
+// app/components/workflow/hooks/use-nodes-interactions.ts
+import type { MouseEvent } from 'react'
+...
+
+export const useNodesInteractions = () => {
+
+  // connect start，记录边起点信息
+  const handleNodeConnectStart = useCallback<OnConnectStart>(
+      (_, { nodeId, handleType, handleId }) => {
+        if (getNodesReadOnly())
+          return
+
+        if (nodeId && handleType) {
+          const { setConnectingNodePayload } = workflowStore.getState()
+          const { nodes } = collaborativeWorkflow.getState()
+          const node = nodes.find(n => n.id === nodeId)!
+
+          // 1. 边起点合法性校验
+          ...
+
+          // 2. 记录边起点信息
+          setConnectingNodePayload({
+            nodeId,
+            nodeType: node.data.type,
+            handleType,
+            handleId,
+          })
+        }
+      },
+      [collaborativeWorkflow, workflowStore, getNodesReadOnly],
+  )
+
+  // ❗️connect process, 创建实际边
+  const handleNodeConnect = useCallback<OnConnect>(
+    ({ source, sourceHandle, target, targetHandle }) => {
+
+      // 1. 边合法性校验，注意 1.3 版本有一个 checkNestedParallelLimit 多校验边的合法性，后续版本移除了这个逻辑
+      ...
+
+      // 2. 生成边元数据 
+      const parendNode = nodes.find(node => node.id === targetNode?.parentId)
+      const isInIteration
+        = parendNode && parendNode.data.type === BlockEnum.Iteration
+      const isInLoop = !!parendNode && parendNode.data.type === BlockEnum.Loop
+
+      const newEdge = {
+        id: `${source}-${sourceHandle}-${target}-${targetHandle}`,
+        type: CUSTOM_EDGE,
+        source: source!,
+        target: target!,
+        sourceHandle,
+        targetHandle,
+        data: {
+          sourceType: nodes.find(node => node.id === source)!.data.type,
+          targetType: nodes.find(node => node.id === target)!.data.type,
+          isInIteration,
+          iteration_id: isInIteration ? targetNode?.parentId : undefined,
+          isInLoop,
+          loop_id: isInLoop ? targetNode?.parentId : undefined,
+        },
+        zIndex: targetNode?.parentId
+          ? isInIteration
+            ? ITERATION_CHILDREN_Z_INDEX
+            : LOOP_CHILDREN_Z_INDEX
+          : 0,
+      }
+      const nodesConnectedSourceOrTargetHandleIdsMap
+        = getNodesConnectedSourceOrTargetHandleIdsMap(
+          [{ type: 'add', edge: newEdge }],
+          nodes,
+        )
+      const newNodes = produce(nodes, (draft: Node[]) => {
+        draft.forEach((node) => {
+          if (nodesConnectedSourceOrTargetHandleIdsMap[node.id]) {
+            node.data = {
+              ...node.data,
+              ...nodesConnectedSourceOrTargetHandleIdsMap[node.id],
+            }
+          }
+        })
+      })
+
+      // 3. 更新数据至 Store 和 后端
+      const newEdges = produce(edges, (draft) => {
+        draft.push(newEdge)
+      })
+
+      setNodes(newNodes)
+      setEdges(newEdges)
+
+      handleSyncWorkflowDraft()
+      saveStateToHistory(WorkflowHistoryEvent.NodeConnect, {
+        nodeId: targetNode?.id,
+      })
+    },
+    [
+      getNodesReadOnly,
+      collaborativeWorkflow,
+      workflowStore,
+      handleSyncWorkflowDraft,
+      saveStateToHistory,
+    ],
+  )
+
+  // connect end，兜底确保边的合法性
+  const handleNodeConnectEnd = useCallback<OnConnectEnd>(
+      (e: any) => {
+        if (getNodesReadOnly())
+          return
+
+        const {
+          connectingNodePayload,
+          setConnectingNodePayload,
+          enteringNodePayload,
+          setEnteringNodePayload,
+        } = workflowStore.getState()
+        if (connectingNodePayload && enteringNodePayload) {
+          const { setShowAssignVariablePopup, hoveringAssignVariableGroupId }
+            = workflowStore.getState()
+          const { screenToFlowPosition } = reactflow
+          const { nodes, setNodes } = collaborativeWorkflow.getState()
+          const fromHandleType = connectingNodePayload.handleType
+          const fromHandleId = connectingNodePayload.handleId
+          const fromNode = nodes.find(
+            n => n.id === connectingNodePayload.nodeId,
+          )!
+          const toNode = nodes.find(n => n.id === enteringNodePayload.nodeId)!
+          const toParentNode = nodes.find(n => n.id === toNode.parentId)
+
+          // 1. 校验生成边合法性
+          if (fromNode.parentId !== toNode.parentId)
+            return
+
+          const { x, y } = screenToFlowPosition({ x: e.x, y: e.y })
+
+          // 2. 变量赋值、聚合节点特殊处理
+          if (
+            fromHandleType === 'source'
+            && (toNode.data.type === BlockEnum.VariableAssigner
+              || toNode.data.type === BlockEnum.VariableAggregator)
+          ) {
+            ...
+          }
+        }
+
+        // 3. 清空边连接数据 
+        setConnectingNodePayload(undefined)
+        setEnteringNodePayload(undefined)
+      },
+      [collaborativeWorkflow, handleNodeConnect, getNodesReadOnly, workflowStore, reactflow],
+  )
+
+  return {
+    handleNodeConnect,
+    handleNodeConnectStart,
+    handleNodeConnectEnd,
+  }
+}
+```
+
+- 拖拽边
+ 
+```tsx
+// app/components/workflow/hooks/use-edges-interactions.ts
+import type { EdgeMouseHandler } from 'reactflow'
+...
+
+export const useEdgesInteractions = () => {
+  const store = useStoreApi()
+  const { handleSyncWorkflowDraft } = useNodesSyncDraft()
+
+  // hover 边：只更新边的 hover 状态
+  const handleEdgeEnter = useCallback<EdgeMouseHandler>((_, edge) => {
+    if (getNodesReadOnly())
+      return
+
+    const { edges, setEdges } = store.getState()
+    setEdges(updateEdgeHoverState(edges, edge.id, true))
+  }, [getNodesReadOnly, store])
+  const handleEdgeLeave = useCallback<EdgeMouseHandler>((_, edge) => {
+    if (getNodesReadOnly())
+      return
+
+    const { edges, setEdges } = store.getState()
+    setEdges(updateEdgeHoverState(edges, edge.id, false))
+  }, [getNodesReadOnly, store])
+
+  // ❗️拖拽边：只处理边的select状态，不处理添加、删除等操作与官方实现不同
+  const handleEdgesChange = useCallback<OnEdgesChange>((changes) => {
+    if (getNodesReadOnly())
+      return
+
+    const {
+      edges,
+      setEdges,
+    } = collaborativeWorkflow.getState()
+    setEdges(updateEdgeSelectionState(edges, changes))
+  }, [collaborativeWorkflow, getNodesReadOnly])
+
+  return {
+    handleEdgeEnter,
+    handleEdgeLeave,
+    handleEdgesChange,
+  }
+}
+```
+
+```tsx
+// app/components/workflow/hooks/use-edges-interactions.helpers.ts
+import type { Edge, EdgeChange } from 'reactflow'
+...
+
+// 只更新边的hover状态
+export const updateEdgeHoverState = (
+  edges: Edge[],
+  edgeId: string,
+  hovering: boolean,
+) => produce(edges, (draft) => {
+  const currentEdge = draft.find(edge => edge.id === edgeId)
+  if (currentEdge)
+    currentEdge.data._hovering = hovering
+})
+
+// 只更新边的选中状态
+export const updateEdgeSelectionState = (
+  edges: Edge[],
+  changes: EdgeChange[],
+) => produce(edges, (draft) => {
+  changes.forEach((change) => {
+    if (change.type === 'select') {
+      const currentEdge = draft.find(edge => edge.id === change.id)
+      if (currentEdge)
+        currentEdge.selected = change.selected
+    }
+  })
+})
+```
+
+- 删除边
+```tsx
+// app/components/workflow/hooks/use-edges-interactions.ts
+import type { EdgeMouseHandler } from 'reactflow'
+...
+
+export const useEdgesInteractions = () => {
+  const store = useStoreApi()
+  const { handleSyncWorkflowDraft } = useNodesSyncDraft()
+  
+  // 核心函数：删除边
+  const deleteEdgeById = useCallback((edgeId: string) => {
+    const {
+      nodes,
+      setNodes,
+      edges,
+      setEdges,
+    } = collaborativeWorkflow.getState()
+    const currentEdgeIndex = edges.findIndex(edge => edge.id === edgeId)
+
+    if (currentEdgeIndex < 0)
+      return
+    const currentEdge = edges[currentEdgeIndex]!
+
+    // 更新节点的连接元数据
+    const newNodes = applyConnectedHandleNodeData(nodes, [{ type: 'remove', edge: currentEdge }])
+    setNodes(newNodes)
+
+    // 删除边
+    const newEdges = produce(edges, (draft) => {
+      draft.splice(currentEdgeIndex, 1)
+    })
+    setEdges(newEdges)
+    if (clearEdgeMenuIfNeeded({ edgeMenu: workflowStore.getState().edgeMenu, edgeIds: [currentEdge!.id] }))
+      workflowStore.setState({ edgeMenu: undefined })
+    handleSyncWorkflowDraft()
+    saveStateToHistory(WorkflowHistoryEvent.EdgeDelete)
+  }, [collaborativeWorkflow, workflowStore, handleSyncWorkflowDraft, saveStateToHistory])
+  
+  const handleEdgeDeleteByDeleteBranch = useCallback((nodeId: string, branchId: string) => {
+    if (getNodesReadOnly())
+      return
+
+    const {
+      nodes,
+      setNodes,
+      edges,
+      setEdges,
+    } = collaborativeWorkflow.getState()
+    const edgeWillBeDeleted = edges.filter(edge => edge.source === nodeId && edge.sourceHandle === branchId)
+
+    if (!edgeWillBeDeleted.length)
+      return
+
+    const newNodes = applyConnectedHandleNodeData(
+      nodes,
+      edgeWillBeDeleted.map(edge => ({ type: 'remove' as const, edge })),
+    )
+    setNodes(newNodes)
+    const newEdges = produce(edges, (draft) => {
+      return draft.filter(edge => !edgeWillBeDeleted.find(e => e.id === edge.id))
+    })
+    setEdges(newEdges)
+    if (clearEdgeMenuIfNeeded({
+      edgeMenu: workflowStore.getState().edgeMenu,
+      edgeIds: edgeWillBeDeleted.map(edge => edge.id),
+    })) {
+      workflowStore.setState({ edgeMenu: undefined })
+    }
+    handleSyncWorkflowDraft()
+    saveStateToHistory(WorkflowHistoryEvent.EdgeDeleteByDeleteBranch)
+  }, [getNodesReadOnly, collaborativeWorkflow, workflowStore, handleSyncWorkflowDraft, saveStateToHistory])
+
+  const handleEdgeDelete = useCallback(() => {
+    if (getNodesReadOnly())
+      return
+    const { edges } = collaborativeWorkflow.getState()
+    const currentEdge = edges.find(edge => edge.selected)
+
+    if (!currentEdge)
+      return
+
+    deleteEdgeById(currentEdge.id)
+  }, [deleteEdgeById, getNodesReadOnly, collaborativeWorkflow])
+
+  const handleEdgeDeleteById = useCallback((edgeId: string) => {
+    if (getNodesReadOnly())
+      return
+
+    deleteEdgeById(edgeId)
+  }, [deleteEdgeById, getNodesReadOnly])
+
+  return {
+    deleteEdgeById
+    handleEdgeDelete,
+    handleEdgeDeleteById,
+    handleEdgeDeleteByDeleteBranch,
+  }
+}
+```
 
 
 ### 2.3 执行层

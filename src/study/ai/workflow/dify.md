@@ -942,7 +942,7 @@ export const initialEdges = (originEdges: Edge[], originNodes: Node[]) => {
 **第三步：采用 ReactFLow 绘制工作流，** 查看核心组件 `WorkflowWithDefaultContext`，了解 [Overview (ReactFlow)](https://reactflow.dev/learn/concepts/terms-and-definitions) 绘制基本组件 Node、Edge、Handle（连接点）
 
 
-``` tsx
+```tsx{55,72,91,110,164,245,257,303}
 // app/components/workflow/index.tsx
 
 'use client'
@@ -1405,40 +1405,14 @@ export default memo(WorkflowWithDefaultContext)
 `Edge 交互逻辑`
 
 - 新增边
-```tsx
+```tsx{37,40,83}
 // app/components/workflow/hooks/use-nodes-interactions.ts
 import type { MouseEvent } from 'react'
 ...
 
 export const useNodesInteractions = () => {
 
-  // connect start，记录边起点信息
-  const handleNodeConnectStart = useCallback<OnConnectStart>(
-      (_, { nodeId, handleType, handleId }) => {
-        if (getNodesReadOnly())
-          return
-
-        if (nodeId && handleType) {
-          const { setConnectingNodePayload } = workflowStore.getState()
-          const { nodes } = collaborativeWorkflow.getState()
-          const node = nodes.find(n => n.id === nodeId)!
-
-          // 1. 边起点合法性校验
-          ...
-
-          // 2. 记录边起点信息
-          setConnectingNodePayload({
-            nodeId,
-            nodeType: node.data.type,
-            handleType,
-            handleId,
-          })
-        }
-      },
-      [collaborativeWorkflow, workflowStore, getNodesReadOnly],
-  )
-
-  // ❗️connect process, 创建实际边
+  // ❗️connect process, 创建实际边 // [!code error]
   const handleNodeConnect = useCallback<OnConnect>(
     ({ source, sourceHandle, target, targetHandle }) => {
 
@@ -1488,7 +1462,7 @@ export const useNodesInteractions = () => {
         })
       })
 
-      // 3. 更新数据至 Store 和 后端
+      // 3. 更新边数据，并同步至 Store 和 后端
       const newEdges = produce(edges, (draft) => {
         draft.push(newEdge)
       })
@@ -1510,7 +1484,44 @@ export const useNodesInteractions = () => {
     ],
   )
 
-  // connect end，兜底确保边的合法性
+  return {
+    handleNodeConnect,
+    handleNodeConnectStart,
+    handleNodeConnectEnd,
+  }
+}
+```
+:::details handleNodeConnectStart - 开始连接边前，记录边起点信息
+```tsx
+  const handleNodeConnectStart = useCallback<OnConnectStart>(
+      (_, { nodeId, handleType, handleId }) => {
+        if (getNodesReadOnly())
+          return
+
+        if (nodeId && handleType) {
+          const { setConnectingNodePayload } = workflowStore.getState()
+          const { nodes } = collaborativeWorkflow.getState()
+          const node = nodes.find(n => n.id === nodeId)!
+
+          // 1. 边起点合法性校验
+          ...
+
+          // 2. 记录边起点信息
+          setConnectingNodePayload({
+            nodeId,
+            nodeType: node.data.type,
+            handleType,
+            handleId,
+          })
+        }
+      },
+      [collaborativeWorkflow, workflowStore, getNodesReadOnly],
+  )
+```
+:::
+
+:::details handleNodeConnectEnd - 结束连接边后，兜底确保边的合法性
+```tsx
   const handleNodeConnectEnd = useCallback<OnConnectEnd>(
       (e: any) => {
         if (getNodesReadOnly())
@@ -1557,14 +1568,8 @@ export const useNodesInteractions = () => {
       },
       [collaborativeWorkflow, handleNodeConnect, getNodesReadOnly, workflowStore, reactflow],
   )
-
-  return {
-    handleNodeConnect,
-    handleNodeConnectStart,
-    handleNodeConnectEnd,
-  }
-}
 ```
+:::
 
 - 拖拽边
  
@@ -1593,7 +1598,7 @@ export const useEdgesInteractions = () => {
     setEdges(updateEdgeHoverState(edges, edge.id, false))
   }, [getNodesReadOnly, store])
 
-  // ❗️拖拽边：只处理边的select状态，不处理添加、删除等操作与官方实现不同
+  // ❗️拖拽边：只处理边的select状态，不处理添加、删除等操作与官方实现不同 // [!code error]
   const handleEdgesChange = useCallback<OnEdgesChange>((changes) => {
     if (getNodesReadOnly())
       return
@@ -1654,7 +1659,7 @@ export const useEdgesInteractions = () => {
   const store = useStoreApi()
   const { handleSyncWorkflowDraft } = useNodesSyncDraft()
   
-  // 核心函数：删除边
+  // ❗️核心函数：删除边 // [!code error]
   const deleteEdgeById = useCallback((edgeId: string) => {
     const {
       nodes,
@@ -1668,11 +1673,11 @@ export const useEdgesInteractions = () => {
       return
     const currentEdge = edges[currentEdgeIndex]!
 
-    // 更新节点的连接元数据
+    // 1. 更新节点的边连接数据 // [!code highlight]
     const newNodes = applyConnectedHandleNodeData(nodes, [{ type: 'remove', edge: currentEdge }])
     setNodes(newNodes)
 
-    // 删除边
+    // 2. 删除边并同步至 Store 和 后端 // [!code highlight]
     const newEdges = produce(edges, (draft) => {
       draft.splice(currentEdgeIndex, 1)
     })
@@ -1682,7 +1687,18 @@ export const useEdgesInteractions = () => {
     handleSyncWorkflowDraft()
     saveStateToHistory(WorkflowHistoryEvent.EdgeDelete)
   }, [collaborativeWorkflow, workflowStore, handleSyncWorkflowDraft, saveStateToHistory])
-  
+
+   return {
+    deleteEdgeById
+    handleEdgeDelete,
+    handleEdgeDeleteById,
+    handleEdgeDeleteByDeleteBranch,
+  }
+}
+```
+
+::: details handleEdgeDeleteByDeleteBranch - 特殊场景：用户在节点面板（例如 IF-ELSE节点）上删除某个 branch 时，删除该 branch对应的边
+```tsx
   const handleEdgeDeleteByDeleteBranch = useCallback((nodeId: string, branchId: string) => {
     if (getNodesReadOnly())
       return
@@ -1716,7 +1732,11 @@ export const useEdgesInteractions = () => {
     handleSyncWorkflowDraft()
     saveStateToHistory(WorkflowHistoryEvent.EdgeDeleteByDeleteBranch)
   }, [getNodesReadOnly, collaborativeWorkflow, workflowStore, handleSyncWorkflowDraft, saveStateToHistory])
+```
+:::
 
+::: details handleEdgeDelete - 删除当前选中边
+```tsx
   const handleEdgeDelete = useCallback(() => {
     if (getNodesReadOnly())
       return
@@ -1728,22 +1748,19 @@ export const useEdgesInteractions = () => {
 
     deleteEdgeById(currentEdge.id)
   }, [deleteEdgeById, getNodesReadOnly, collaborativeWorkflow])
+```
+:::
 
+::: details handleEdgeDeleteById - 删除指定ID的边
+```tsx
   const handleEdgeDeleteById = useCallback((edgeId: string) => {
     if (getNodesReadOnly())
       return
 
     deleteEdgeById(edgeId)
   }, [deleteEdgeById, getNodesReadOnly])
-
-  return {
-    deleteEdgeById
-    handleEdgeDelete,
-    handleEdgeDeleteById,
-    handleEdgeDeleteByDeleteBranch,
-  }
-}
 ```
+:::
 
 
 ### 2.3 执行层

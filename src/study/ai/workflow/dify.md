@@ -610,8 +610,7 @@ const WorkflowAppWrapper = () => {
 export default WorkflowAppWrapper
 
 ```
-
-**1. 初始化数据**
+#### 2.2.1 初始化数据
 
   **第一步：从后端获取数据**，前端将数据存储在 Store 中准备渲染。查看核心 hook `useWorkflowInit`，前端通过 appId 从后端获取初始的 draft 数据（graph + 配置信息），注意后端会返回一个 draft 的 hash 摘要，该摘要唯一用于前端上报 draft 时告诉后端"我基于这个版本修改"，用于解决多人协同编辑问题。
 
@@ -937,7 +936,7 @@ export const initialEdges = (originEdges: Edge[], originNodes: Node[]) => {
 
 ```
 
-**2. ReactFlow 画布初始化，渲染、节点、边**
+#### 2.2.2 ReactFlow 画布初始化，渲染、节点、边
 
 **第三步：采用 ReactFLow 绘制工作流，** 查看核心组件 `WorkflowWithDefaultContext`，了解 [Overview (ReactFlow)](https://reactflow.dev/learn/concepts/terms-and-definitions) 绘制基本组件 Node、Edge、Handle（连接点）
 
@@ -1394,17 +1393,270 @@ export default memo(WorkflowWithDefaultContext)
 - [1] [Custom Nodes (ReactFlow)](https://reactflow.dev/learn/customization/custom-nodes)
 - [2] [Custom Edges (ReactFlow)](https://reactflow.dev/learn/customization/custom-edges)
 
-**3. 用户交互逻辑**
+
+#### 2.2.3 用户交互逻辑
 
 **第四步：通过自定义 ReactFlow Hook 实现用户交互逻辑，** 包括拖拽、增、删节点 & 边等等。
 参考 [Adding Interactivity (ReactFlow)](https://reactflow.dev/learn/concepts/adding-interactivity) 官方实现，实际项目中实现方式复杂许多。
 
-`Node 交互逻辑`
+##### `Node 交互逻辑`
 
+######  新增节点
 
-`Edge 交互逻辑`
+<div align="center"> <img src="http://dwc-images-store.oss-cn-beijing.aliyuncs.com/images/20260517195731.png"/> </div>
 
-- 新增边
+```tsx
+// web/app/components/workflow/hooks/use-nodes-interactions.ts
+import type { MouseEvent } from 'react'
+...
+
+// jing y
+export const useNodesInteractions = () => {
+
+  /**
+   * handleNodeAdd - 在画布中新增节点，支持 3 种插入模式：
+   *   A. 仅 prevNodeId → 追加到指定节点之后
+   *   B. 仅 nextNodeId → 插入到指定节点之前
+   *   C. 同时 prevNodeId + nextNodeId → 在两节点之间插入
+   *
+   * 通用流程：生成节点 → 计算位置/边 → 处理嵌套 → 更新 Store → 同步后端 & 记录历史
+   */
+  const handleNodeAdd = useCallback<OnNodeAdd>(
+    (
+      { nodeType, sourceHandle = 'source', targetHandle = 'target', pluginDefaultValue },
+      { prevNodeId, prevNodeSourceHandle, nextNodeId, nextNodeTargetHandle },
+    ) => {
+      if (getNodesReadOnly())
+        return
+
+      const { nodes, setNodes, edges, setEdges } = collaborativeWorkflow.getState()
+
+      // ==================== 步骤1：生成新节点实例 ====================
+      // 根据 nodeType 元数据创建节点，自动生成递增标题（如 "HTTP 请求 2"）
+      const nodesWithSameType = nodes.filter(node => node.data.type === nodeType)
+      const nodeMetaData = nodesMetaDataMap?.[nodeType]
+      if (!nodeMetaData) return
+      const { defaultValue } = nodeMetaData
+      const { newNode, newIterationStartNode, newLoopStartNode } = generateNewNode({
+        type: getNodeCustomTypeByNodeDataType(nodeType),
+        data: {
+          ...(defaultValue as any),
+          title: nodesWithSameType.length > 0
+            ? `${defaultValue.title} ${nodesWithSameType.length + 1}`
+            : defaultValue.title,
+          ...pluginDefaultValue,
+          selected: true,
+        },
+        position: { x: 0, y: 0 },
+      })
+
+      // ==================== 阶段2：根据插入模式处理位置、边、嵌套关系 ====================
+      //
+      // 三种模式的通用步骤：计算位置 → 继承嵌套 → 创建边 → 更新 Store → 提交
+      // 以下以「模式 A：追加」为例详细注释，模式 B/C 仅标注差异点
+
+      // ── 模式 A：追加到 prevNode 之后 ──
+      if (prevNodeId && !nextNodeId) {
+        const prevNodeIndex = nodes.findIndex(node => node.id === prevNodeId)
+        const prevNode = nodes[prevNodeIndex]
+
+        // A-1. 计算位置：放在 prevNode 最后一个下游节点的下方
+        const outgoers = getOutgoers(prevNode!, nodes, edges).sort((a, b) => a.position.y - b.position.y)
+        const lastOutgoer = outgoers.at(-1)
+        newNode.position = {
+          x: lastOutgoer ? lastOutgoer.position.x : prevNode!.position.x + prevNode!.width! + X_OFFSET,
+          y: lastOutgoer ? lastOutgoer.position.y + lastOutgoer.height! + Y_OFFSET : prevNode!.position.y,
+        }
+        newNode.parentId = prevNode!.parentId
+        newNode.extent = prevNode!.extent
+
+        // A-2. 继承父节点的 iteration/loop 嵌套信息
+        const parentNode = nodes.find(node => node.id === prevNode!.parentId) || null
+        const isInIteration = !!parentNode && parentNode.data.type === BlockEnum.Iteration
+        const isInLoop = !!parentNode && parentNode.data.type === BlockEnum.Loop
+        if (prevNode!.parentId) {
+          newNode.data.isInIteration = isInIteration
+          newNode.data.isInLoop = isInLoop
+          if (isInIteration) { newNode.data.iteration_id = parentNode.id; newNode.zIndex = ITERATION_CHILDREN_Z_INDEX }
+          if (isInLoop) { newNode.data.loop_id = parentNode.id; newNode.zIndex = LOOP_CHILDREN_Z_INDEX }
+        }
+
+        // A-3. 创建边 prevNode → newNode（DataSource 节点不连入边）
+        let newEdge = null
+        if (nodeType !== BlockEnum.DataSource) {
+          newEdge = {
+            id: `${prevNodeId}-${prevNodeSourceHandle}-${newNode.id}-${targetHandle}`,
+            type: CUSTOM_EDGE,
+            source: prevNodeId, sourceHandle: prevNodeSourceHandle,
+            target: newNode.id, targetHandle,
+            data: { sourceType: prevNode!.data.type, targetType: newNode.data.type, isInIteration, isInLoop, ... },
+            zIndex: prevNode!.parentId ? (isInIteration ? ITERATION_CHILDREN_Z_INDEX : LOOP_CHILDREN_Z_INDEX) : 0,
+          }
+        }
+
+        // A-4. 更新连接句柄数据，将新节点推入父节点的 _children 列表
+        const nodesConnectedSourceOrTargetHandleIdsMap = getNodesConnectedSourceOrTargetHandleIdsMap(
+          newEdge ? [{ type: 'add', edge: newEdge }] : [], nodes,
+        )
+        const newNodes = produce(nodes, (draft) => {
+          draft.forEach((node) => {
+            node.data.selected = false
+            if (nodesConnectedSourceOrTargetHandleIdsMap[node.id])
+              node.data = { ...node.data, ...nodesConnectedSourceOrTargetHandleIdsMap[node.id] }
+            if ((node.data.type === BlockEnum.Iteration || node.data.type === BlockEnum.Loop) && prevNode!.parentId === node.id)
+              node.data._children?.push({ nodeId: newNode.id, nodeType: newNode.data.type })
+          })
+          draft.push(newNode)
+          if (newIterationStartNode) draft.push(newIterationStartNode)
+          if (newLoopStartNode) draft.push(newLoopStartNode)
+        })
+
+        // A-5. VariableAssigner/Aggregator 特殊处理：弹出变量分配弹窗
+        if (newNode.data.type === BlockEnum.VariableAssigner || newNode.data.type === BlockEnum.VariableAggregator) {
+          const { setShowAssignVariablePopup } = workflowStore.getState()
+          setShowAssignVariablePopup({ nodeId: prevNode!.id, /* ... */ })
+        }
+
+        // A-6. 生成新边并提交
+        const newEdges = produce(edges, (draft) => {
+          draft.forEach(item => item.data = { ...item.data, _connectedNodeIsSelected: false })
+          if (newEdge) draft.push(newEdge)
+        })
+        setNodes(newNodes)
+        setEdges(newEdges)
+      }
+
+      // ── 模式 B：插入到 nextNode 之前 ──
+      // 与模式 A 差异：
+      //   ① 位置：占 nextNode 位置，后续节点整体右移 NODE_WIDTH_X_OFFSET
+      //   ② 边方向：newNode → nextNode（而非 prevNode → newNode）
+      //   ③ 排除规则：分支/人工/LoopEnd 节点不连出边
+      //   ④ 额外处理：若 nextNode 是 iteration/loop 的 start_node，需更新 start_node_id
+      if (!prevNodeId && nextNodeId) {
+        const nextNode = nodes[nodes.findIndex(node => node.id === nextNodeId)]!
+        newNode.position = { x: nextNode.position.x, y: nextNode.position.y }
+        newNode.parentId = nextNode.parentId; newNode.extent = nextNode.extent
+
+        // 继承嵌套（同 A-2），参考节点为 nextNode
+        const parentNode = nodes.find(node => node.id === nextNode.parentId) || null
+        const isInIteration = !!parentNode && parentNode.data.type === BlockEnum.Iteration
+        const isInLoop = !!parentNode && parentNode.data.type === BlockEnum.Loop
+        if (parentNode && nextNode.parentId) {
+          newNode.data.isInIteration = isInIteration; newNode.data.isInLoop = isInLoop
+          if (isInIteration) { newNode.data.iteration_id = parentNode.id; newNode.zIndex = ITERATION_CHILDREN_Z_INDEX }
+          if (isInLoop) { newNode.data.loop_id = parentNode.id; newNode.zIndex = LOOP_CHILDREN_Z_INDEX }
+        }
+
+        // 创建边 newNode → nextNode（排除分支/人工/LoopEnd 节点）
+        let newEdge
+        if (![BlockEnum.IfElse, BlockEnum.QuestionClassifier, BlockEnum.HumanInput, BlockEnum.LoopEnd].includes(nodeType)) {
+          newEdge = { id: `${newNode.id}-${sourceHandle}-${nextNodeId}-${nextNodeTargetHandle}`, type: CUSTOM_EDGE, source: newNode.id, sourceHandle, target: nextNodeId, targetHandle: nextNodeTargetHandle, data: { sourceType: newNode.data.type, targetType: nextNode.data.type, isInIteration, isInLoop, ... }, zIndex: nextNode.parentId ? (isInIteration ? ITERATION_CHILDREN_Z_INDEX : LOOP_CHILDREN_Z_INDEX) : 0 }
+        }
+
+        // 差异④：后续节点右移 + 更新 start_node_id
+        const afterNodesInSameBranchIds = getAfterNodesInSameBranch(nextNodeId!).map(n => n.id)
+        const nodesConnectedSourceOrTargetHandleIdsMap = newEdge
+          ? getNodesConnectedSourceOrTargetHandleIdsMap([{ type: 'add', edge: newEdge }], nodes) : {}
+        const newNodes = produce(nodes, (draft) => {
+          draft.forEach((node) => {
+            node.data.selected = false
+            if (afterNodesInSameBranchIds.includes(node.id)) node.position.x += NODE_WIDTH_X_OFFSET
+            if (nodesConnectedSourceOrTargetHandleIdsMap?.[node.id]) node.data = { ...node.data, ...nodesConnectedSourceOrTargetHandleIdsMap[node.id] }
+            if ((node.data.type === BlockEnum.Iteration || node.data.type === BlockEnum.Loop) && nextNode.parentId === node.id)
+              node.data._children?.push({ nodeId: newNode.id, nodeType: newNode.data.type })
+            if ((node.data.type === BlockEnum.Iteration || node.data.type === BlockEnum.Loop) && node.data.start_node_id === nextNodeId)
+              { node.data.start_node_id = newNode.id; node.data.startNodeType = newNode.data.type }
+          })
+          draft.push(newNode)
+          if (newIterationStartNode) draft.push(newIterationStartNode)
+          if (newLoopStartNode) draft.push(newLoopStartNode)
+        })
+
+        if (newEdge) {
+          setNodes(newNodes)
+          setEdges(produce(edges, (draft) => { draft.forEach(item => item.data = { ...item.data, _connectedNodeIsSelected: false }); draft.push(newEdge) }))
+        } else {
+          setNodes(newNodes)
+        }
+      }
+
+      // ── 模式 C：插入到 prevNode 和 nextNode 之间 ──
+      // 与模式 A 差异：
+      //   ① 位置：占 nextNode 位置，后续节点右移
+      //   ② 边操作：先移除旧边 prevNode→nextNode，再创建两条新边 prevNode→newNode、newNode→nextNode
+      //   ③ 新边需要同时考虑 prev 和 next 两端的嵌套上下文
+      if (prevNodeId && nextNodeId) {
+        const prevNode = nodes.find(node => node.id === prevNodeId)!
+        const nextNode = nodes.find(node => node.id === nextNodeId)!
+        newNode.position = { x: nextNode.position.x, y: nextNode.position.y }
+        newNode.parentId = prevNode.parentId; newNode.extent = prevNode.extent
+
+        // 继承嵌套（同 A-2）
+        const parentNode = nodes.find(node => node.id === prevNode.parentId) || null
+        const isInIteration = !!parentNode && parentNode.data.type === BlockEnum.Iteration
+        const isInLoop = !!parentNode && parentNode.data.type === BlockEnum.Loop
+        if (parentNode && prevNode.parentId) {
+          newNode.data.isInIteration = isInIteration; newNode.data.isInLoop = isInLoop
+          if (isInIteration) { newNode.data.iteration_id = parentNode.id; newNode.zIndex = ITERATION_CHILDREN_Z_INDEX }
+          if (isInLoop) { newNode.data.loop_id = parentNode.id; newNode.zIndex = LOOP_CHILDREN_Z_INDEX }
+        }
+
+        // 差异②：找到旧边，创建两条新边
+        const currentEdgeIndex = edges.findIndex(edge => edge.source === prevNodeId && edge.target === nextNodeId)
+        let newPrevEdge = null, newNextEdge: Edge | null = null
+        if (nodeType !== BlockEnum.DataSource)
+          newPrevEdge = { id: `${prevNodeId}-${prevNodeSourceHandle}-${newNode.id}-${targetHandle}`, type: CUSTOM_EDGE, source: prevNodeId, sourceHandle: prevNodeSourceHandle, target: newNode.id, targetHandle, data: { ... }, zIndex: prevNode.parentId ? (isInIteration ? ITERATION_CHILDREN_Z_INDEX : LOOP_CHILDREN_Z_INDEX) : 0 }
+        if (![BlockEnum.IfElse, BlockEnum.QuestionClassifier, BlockEnum.HumanInput, BlockEnum.LoopEnd].includes(nodeType)) {
+          const nextParent = nodes.find(n => n.id === nextNode.parentId) || null
+          newNextEdge = { id: `${newNode.id}-${sourceHandle}-${nextNodeId}-${nextNodeTargetHandle}`, type: CUSTOM_EDGE, source: newNode.id, sourceHandle, target: nextNodeId, targetHandle: nextNodeTargetHandle, data: { ... }, zIndex: nextNode.parentId ? (nextParent?.data.type === BlockEnum.Iteration ? ITERATION_CHILDREN_Z_INDEX : LOOP_CHILDREN_Z_INDEX) : 0 }
+        }
+
+        // 差异③：getNodesConnected 需同时传入 remove(旧边) + add(两条新边)
+        const nodesConnectedSourceOrTargetHandleIdsMap = getNodesConnectedSourceOrTargetHandleIdsMap(
+          [{ type: 'remove', edge: edges[currentEdgeIndex]! }, ...(newPrevEdge ? [{ type: 'add', edge: newPrevEdge }] : []), ...(newNextEdge ? [{ type: 'add', edge: newNextEdge }] : [])],
+          [...nodes, newNode],
+        )
+        const afterNodesInSameBranchIds = getAfterNodesInSameBranch(nextNodeId!).map(n => n.id)
+        const newNodes = produce(nodes, (draft) => {
+          draft.forEach((node) => {
+            node.data.selected = false
+            if (nodesConnectedSourceOrTargetHandleIdsMap[node.id]) node.data = { ...node.data, ...nodesConnectedSourceOrTargetHandleIdsMap[node.id] }
+            if (afterNodesInSameBranchIds.includes(node.id)) node.position.x += NODE_WIDTH_X_OFFSET
+            if ((node.data.type === BlockEnum.Iteration || node.data.type === BlockEnum.Loop) && prevNode.parentId === node.id)
+              node.data._children?.push({ nodeId: newNode.id, nodeType: newNode.data.type })
+          })
+          draft.push(newNode)
+          if (newIterationStartNode) draft.push(newIterationStartNode)
+          if (newLoopStartNode) draft.push(newLoopStartNode)
+        })
+        setNodes(newNodes)
+
+        // VariableAssigner/Aggregator 弹窗（同 A-5）
+        if (newNode.data.type === BlockEnum.VariableAssigner || newNode.data.type === BlockEnum.VariableAggregator)
+          workflowStore.getState().setShowAssignVariablePopup({ nodeId: prevNode.id, /* ... */ })
+
+        // 替换边：删除旧边，添加两条新边
+        const newEdges = produce(edges, (draft) => {
+          draft.splice(currentEdgeIndex, 1)
+          draft.forEach(item => item.data = { ...item.data, _connectedNodeIsSelected: false })
+          if (newPrevEdge) draft.push(newPrevEdge)
+          if (newNextEdge) draft.push(newNextEdge)
+        })
+        setEdges(newEdges)
+      }
+
+      // ==================== 步骤3：同步草稿 & 记录操作历史 ====================
+      handleSyncWorkflowDraft()
+      saveStateToHistory(WorkflowHistoryEvent.NodeAdd, { nodeId: newNode.id })
+    },
+    [getNodesReadOnly, collaborativeWorkflow, handleSyncWorkflowDraft, saveStateToHistory, workflowStore, getAfterNodesInSameBranch, nodesMetaDataMap],
+  )    
+}
+```
+
+##### `Edge 交互逻辑`
+
+######  新增边
 ```tsx{37,40,83}
 // app/components/workflow/hooks/use-nodes-interactions.ts
 import type { MouseEvent } from 'react'
@@ -1571,7 +1823,7 @@ export const useNodesInteractions = () => {
 ```
 :::
 
-- 拖拽边
+###### 拖拽边
  
 ```tsx
 // app/components/workflow/hooks/use-edges-interactions.ts
@@ -1649,7 +1901,7 @@ export const updateEdgeSelectionState = (
 })
 ```
 
-- 删除边
+###### 删除边
 ```tsx
 // app/components/workflow/hooks/use-edges-interactions.ts
 import type { EdgeMouseHandler } from 'reactflow'

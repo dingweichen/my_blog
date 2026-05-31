@@ -127,6 +127,12 @@ export default withMermaid(
                 items: [{ text: 'Dify 解析', link: '/study/ai/workflow/dify' }],
                 // collapsed: true,
               },
+              {
+                text: '应用',
+                items: [
+                  { text: 'Harness', link: '/study/ai/application/harness.md' },
+                ],
+              },
             ],
           },
         ],

@@ -1,0 +1,12 @@
+/* 表格：去除斑马纹，仅表头底色加深 */
+.vp-doc table tr {
+  background-color: transparent !important;
+}
+
+.vp-doc table tr:nth-child(2n) {
+  background-color: transparent !important;
+}
+
+.vp-doc table thead tr {
+  background-color: var(--vp-c-bg-soft) !important;
+}
